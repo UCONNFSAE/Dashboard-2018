@@ -7,6 +7,7 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(LED_len, PIN6, NEO_GRB + NEO_KHZ800)
 uint32_t green = strip.Color(0, 20, 0),
          yellow = strip.Color(20, 20, 0),
          red = strip.Color(20, 0, 0),
+         red_max = strip.Color(100, 0, 0),
          blue = strip.Color(0, 0, 20),
          ledArray[16] = {green, green, green, green, green, yellow, yellow, yellow, yellow, yellow, yellow, red, red, red, red, red};
 
@@ -17,6 +18,7 @@ int prev_RPM_Signal = 0;
 void setup() {
   // put your setup code here, to run once:  
   strip.begin();
+  strip.setBrightness(100);
 }
 
 
@@ -39,7 +41,6 @@ void updateLEDs(int RPM) {
   // Tachometer increases/decreases linearly
   if (0 <= RPM and RPM < 16) {
       // Below max RPM
-      strip.setBrightness(100);
       for (int i = 0; i < LED_len; i++) {
         if (i <= RPM) {
           strip.setPixelColor(i, ledArray[i]);
@@ -53,9 +54,8 @@ void updateLEDs(int RPM) {
     else if (RPM == 16) {
     // At max RPM - Flash red
     // Red on
-    strip.setBrightness(255);
     for (int i = 0; i < LED_len; i++) {
-      strip.setPixelColor(i, red);
+      strip.setPixelColor(i, red_max);
       }
     strip.show();
     delay(100);
@@ -68,7 +68,6 @@ void updateLEDs(int RPM) {
     else {
       // Error indicator - RPM signal is out of range
       strip.clear();
-      strip.setBrightness(100);
       for (int i = 0; i < LED_len; i = i + 2) {
         strip.setPixelColor(i, blue);
       }
