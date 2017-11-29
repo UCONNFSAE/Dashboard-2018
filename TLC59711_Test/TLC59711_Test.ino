@@ -5,7 +5,7 @@
 #define data 11
 #define clock 13
 #define OIL_PR 0
-#define ENG_TMP 2
+#define ENG_TMP 1
 
 uint8_t DUTY = 45; // Values range from 1 to 100% to determine duty cycle
 uint16_t PWM_LEVEL = map(DUTY, 0, 100, 0, 65535);//(DUTY/100) * 65535; // PWM value ranges from 0 to 65535
