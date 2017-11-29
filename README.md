@@ -9,7 +9,7 @@
 
    Adafruit_LEDBackpack.h
 
-
+   Adafruit_GFX.h
 
    ### Default Libraries:
    SPI.h
