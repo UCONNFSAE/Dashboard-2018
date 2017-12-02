@@ -18,7 +18,7 @@ const int SPI_CS_PIN = 9;                                   // Declares D9 as CS
 #include <Adafruit_NeoPixel.h>
 #define PIN 6                                               // Declares D6 for NeoPixel data.
 #include <Adafruit_LEDBackpack.h>
-#include <Adafruit_GFX.h>                                   // ---------------------------------------Unused
+#include <Adafruit_GFX.h>
 #include <Wire.h>
 
 
@@ -37,9 +37,9 @@ uint32_t
 green = strip.Color(0, 255, 0),
 yellow = strip.Color(255, 255, 0),
 red = strip.Color(255, 0, 0),
-blue = strip.Color(0, 0, 255),                              // ---------------------------------------Unused
-red2_3 = strip.Color(45, 0, 0),                             // ---------------------------------------Unused
-red1_3 = strip.Color(15, 0, 0),                             // ---------------------------------------Unused
+blue = strip.Color(0, 0, 255),
+red2_3 = strip.Color(45, 0, 0),
+red1_3 = strip.Color(15, 0, 0),
 color[3] = {green, yellow, red};
 
 bool is_CBS_init = false; //True = CAN-Bus initialized succesfully. False = Not initialized yet.
@@ -74,8 +74,7 @@ void setup()
   alpha2.begin(0x72);  //A1 Shorted = +2
 
 
-  while (is_CBS_init) // This while loop will never run beause is_CBS_init is always False
-                      //CORRECTION: while (!is_CBS_init)
+  while (!is_CBS_init)
   {
     if (CAN_OK == CAN.begin(CAN_1000KBPS,0,0)) {                  // Initializes CAN-BUS Shield at specified baud rate.
       Serial.println("CAN-BUS Shield Initialized!");
@@ -270,7 +269,6 @@ void ledStrip_update(uint16_t LED_RPM) {
 
 
 // LED Strip Clear:
-                        // ---------------------------------------Can possibly use the .clear() method instead
 void clearStrip() {
   for (int ledNum = ledStages[0]; ledNum <= strip.numPixels(); ledNum++) {
     strip.setPixelColor(ledNum, 0);
