@@ -1,0 +1,15 @@
+for i = 1: length(str)
+ if(i < length(str))
+  x1.write(str[i])
+ else
+  x1.write(" ")
+ if((i - 4) > 1 && (i - 4) < length(str))
+  x2.write(str[i-4])
+ else
+  x2.write(" ")
+ if((i - 8) > 1 && (i - 8) < length(str))
+  x3.write(str[i-8])
+ else
+  x3.write(" ")
+
+end for
