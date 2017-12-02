@@ -51,9 +51,7 @@ warningState = 0,
 blinkInterval = 150,  
 stripBrightness = 180;      // 0 = off, 255 = fullbright
 
-float
-LED_RPM,
-prev_rpm;
+float LED_RPM;
 
 
 
