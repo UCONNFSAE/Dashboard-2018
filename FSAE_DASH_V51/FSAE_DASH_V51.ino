@@ -18,7 +18,6 @@ const int SPI_CS_PIN = 9;                                   // Declares D9 as CS
 #include <Adafruit_NeoPixel.h>
 #define PIN 6                                               // Declares D6 for NeoPixel data.
 #include <Adafruit_LEDBackpack.h>
-#include <Adafruit_GFX.h>
 #include <Wire.h>
 
 
@@ -37,9 +36,6 @@ uint32_t
 green = strip.Color(0, 255, 0),
 yellow = strip.Color(255, 255, 0),
 red = strip.Color(255, 0, 0),
-blue = strip.Color(0, 0, 255),
-red2_3 = strip.Color(45, 0, 0),
-red1_3 = strip.Color(15, 0, 0),
 color[3] = {green, yellow, red};
 
 bool is_CBS_init = false; //True = CAN-Bus initialized succesfully. False = Not initialized yet.
@@ -50,10 +46,10 @@ long prevBlinkTime = 0;
 int
 prev_range = 10,
 shiftPT[2] = {2000, 10000},  // point 0 = the activation point 1 = warning point
-             ledStages[8] = {0, 3, 5, 7, 9, 11, 13, 15}, // this is where each stage of the led strip is set. i.e. from ledStages[0] and ledStages[1] is stage one and so on
-                            warningState = 0,
-                            blinkInterval = 150,
-                            stripBrightness = 180;      // 0 = off, 255 = fullbright
+ledStages[8] = {0, 3, 5, 7, 9, 11, 13, 15}, // this is where each stage of the led strip is set. i.e. from ledStages[0] and ledStages[1] is stage one and so on
+warningState = 0,
+blinkInterval = 150,  
+stripBrightness = 180;      // 0 = off, 255 = fullbright
 
 float
 LED_RPM,
@@ -76,28 +72,10 @@ void setup()
 
   while (!is_CBS_init)
   {
-    if (CAN_OK == CAN.begin(CAN_1000KBPS,0,0)) {                  // Initializes CAN-BUS Shield at specified baud rate.
+    if (CAN_OK == CAN.begin(CAN_1000KBPS)) {                  // Initializes CAN-BUS Shield at specified baud rate.
       Serial.println("CAN-BUS Shield Initialized!");
       blink_led(2, 150, color[0]); //WHY is this blinking?
       is_CBS_init = true;
-
-      //this code displays "UoCT FSAE 2016"
-      /*alpha0.writeDigitAscii(0, 'U');
-        alpha0.writeDigitAscii(1, 'o');
-        alpha0.writeDigitAscii(2, 'C');
-        alpha0.writeDigitAscii(3, 'T');
-        alpha0.writeDisplay();
-        alpha1.writeDigitAscii(0, 'F');
-        alpha1.writeDigitAscii(1, 'S');
-        alpha1.writeDigitAscii(2, 'A');
-        alpha1.writeDigitAscii(3, 'E');
-        alpha1.writeDisplay();
-        alpha2.writeDigitAscii(0, '2');
-        alpha2.writeDigitAscii(1, '0');
-        alpha2.writeDigitAscii(2, '1');
-        alpha2.writeDigitAscii(3, '6');
-        alpha2.writeDisplay();*/
-
     }
     else
     {
