@@ -74,7 +74,7 @@ void setup()
   alpha2.begin(0x72);  //A1 Shorted = +2
 
 
-  while (is_CBS_init)
+  while (!is_CBS_init)
   {
     if (CAN_OK == CAN.begin(CAN_1000KBPS,0,0)) {                  // Initializes CAN-BUS Shield at specified baud rate.
       Serial.println("CAN-BUS Shield Initialized!");
