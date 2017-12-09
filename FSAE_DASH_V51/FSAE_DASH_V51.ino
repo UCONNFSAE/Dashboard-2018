@@ -18,7 +18,6 @@ const int SPI_CS_PIN = 9;                                   // Declares D9 as CS
 #include <Adafruit_NeoPixel.h>
 #define PIN 6                                               // Declares D6 for NeoPixel data.
 #include <Adafruit_LEDBackpack.h>
-#include <Adafruit_GFX.h>
 #include <Wire.h>
 
 
@@ -26,9 +25,7 @@ const int SPI_CS_PIN = 9;                                   // Declares D9 as CS
 // Library Initialization:
 MCP_CAN CAN(SPI_CS_PIN);                                                         // Sets CS pin.
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, PIN, NEO_GRB + NEO_KHZ800);      // Configures the NeoPixel Strip for 16 LEDs.
-Adafruit_AlphaNum4 alpha0 = Adafruit_AlphaNum4(); //leftmost display
-Adafruit_AlphaNum4 alpha1 = Adafruit_AlphaNum4(); //middle display
-Adafruit_AlphaNum4 alpha2 = Adafruit_AlphaNum4(); //right most display;
+
 
 
 
@@ -37,9 +34,6 @@ uint32_t
 green = strip.Color(0, 255, 0),
 yellow = strip.Color(255, 255, 0),
 red = strip.Color(255, 0, 0),
-blue = strip.Color(0, 0, 255),
-red2_3 = strip.Color(45, 0, 0),
-red1_3 = strip.Color(15, 0, 0),
 color[3] = {green, yellow, red};
 
 bool is_CBS_init = false; //True = CAN-Bus initialized succesfully. False = Not initialized yet.
@@ -50,14 +44,12 @@ long prevBlinkTime = 0;
 int
 prev_range = 10,
 shiftPT[2] = {2000, 10000},  // point 0 = the activation point 1 = warning point
-             ledStages[8] = {0, 3, 5, 7, 9, 11, 13, 15}, // this is where each stage of the led strip is set. i.e. from ledStages[0] and ledStages[1] is stage one and so on
-                            warningState = 0,
-                            blinkInterval = 150,
-                            stripBrightness = 180;      // 0 = off, 255 = fullbright
+ledStages[8] = {0, 3, 5, 7, 9, 11, 13, 15}, // this is where each stage of the led strip is set. i.e. from ledStages[0] and ledStages[1] is stage one and so on
+warningState = 0,
+blinkInterval = 150,  
+stripBrightness = 180;      // 0 = off, 255 = fullbright
 
-float
-LED_RPM,
-prev_rpm;
+float LED_RPM;
 
 
 
@@ -69,35 +61,15 @@ void setup()
   strip.begin(); //initialize the LED Strip.
   strip.setBrightness(stripBrightness);
   strip.show(); // Initialize all pixels to 'off'
-  alpha0.begin(0x70);  //No Pins Shorted
-  alpha1.begin(0x71);  //A0 Shorted = +1
-  alpha2.begin(0x72);  //A1 Shorted = +2
 
 
-  while (is_CBS_init)
+
+  while (!is_CBS_init)
   {
-    if (CAN_OK == CAN.begin(CAN_1000KBPS,0,0)) {                  // Initializes CAN-BUS Shield at specified baud rate.
+    if (CAN_OK == CAN.begin(CAN_1000KBPS)) {           // Initializes CAN-BUS Shield at specified baud rate. 
       Serial.println("CAN-BUS Shield Initialized!");
       blink_led(2, 150, color[0]); //WHY is this blinking?
       is_CBS_init = true;
-
-      //this code displays "UoCT FSAE 2016"
-      /*alpha0.writeDigitAscii(0, 'U');
-        alpha0.writeDigitAscii(1, 'o');
-        alpha0.writeDigitAscii(2, 'C');
-        alpha0.writeDigitAscii(3, 'T');
-        alpha0.writeDisplay();
-        alpha1.writeDigitAscii(0, 'F');
-        alpha1.writeDigitAscii(1, 'S');
-        alpha1.writeDigitAscii(2, 'A');
-        alpha1.writeDigitAscii(3, 'E');
-        alpha1.writeDisplay();
-        alpha2.writeDigitAscii(0, '2');
-        alpha2.writeDigitAscii(1, '0');
-        alpha2.writeDigitAscii(2, '1');
-        alpha2.writeDigitAscii(3, '6');
-        alpha2.writeDisplay();*/
-
     }
     else
     {
@@ -127,71 +99,29 @@ void loop() {
       int rpmB = buf[1];
       int ENGINE_RPM = ((rpmA * 256) + rpmB);
       String ALPHA_RPM = String(ENGINE_RPM / 10);
-      ledStrip_update(ENGINE_RPM);/*
-          alpha0.writeDigitAscii(0, ALPHA_RPM[0]);
-          alpha0.writeDigitAscii(1, ALPHA_RPM[1]);
-          alpha0.writeDigitAscii(2, ALPHA_RPM[2]);
-          alpha0.writeDigitAscii(3, ALPHA_RPM[3]);
-          alpha0.writeDisplay();*/
+      ledStrip_update(ENGINE_RPM);
+      Serial.println(ALPHA_RPM);
     }
 
     if (canId == 1550) {
       int gearA = buf[2];
       int gearB = buf[3];
       String ALPHA_GEAR = String((gearA * 256) + gearB - 2);
-      if (ALPHA_GEAR.equals("0")) {
-        alpha1.writeDigitAscii(0, 'N');
-        alpha1.writeDigitAscii(1, ' ');
-        alpha1.writeDigitAscii(2, ' ');
-        alpha1.writeDigitAscii(3, ' ');
-        alpha1.writeDisplay();
-      } else if (ALPHA_GEAR.equals("1")) {
-        alpha1.writeDigitAscii(0, ALPHA_GEAR[0]);
-        alpha1.writeDigitAscii(1, ' ');
-        alpha1.writeDigitAscii(2, ' ');
-        alpha1.writeDigitAscii(3, ' ');
-        alpha1.writeDisplay();
-      } else if (ALPHA_GEAR.equals("2")) {
-        alpha1.writeDigitAscii(0, ' ');
-        alpha1.writeDigitAscii(1, ALPHA_GEAR[0]);
-        alpha1.writeDigitAscii(2, ' ');
-        alpha1.writeDigitAscii(3, ' ');
-        alpha1.writeDisplay();
-      } else if (ALPHA_GEAR.equals("3")) {
-        alpha1.writeDigitAscii(0, ' ');
-        alpha1.writeDigitAscii(1, ' ');
-        alpha1.writeDigitAscii(2, ALPHA_GEAR[0]);
-        alpha1.writeDigitAscii(3, ' ');
-        alpha1.writeDisplay();
-      } else if (ALPHA_GEAR.equals("4")) {
-        alpha1.writeDigitAscii(0, ' ');
-        alpha1.writeDigitAscii(1, ' ');
-        alpha1.writeDigitAscii(2, ' ');
-        alpha1.writeDigitAscii(3, ALPHA_GEAR[0]);
-        alpha1.writeDisplay();
-      }
+      Serial.println(ALPHA_GEAR);
     }
 
     if (canId == 1542) {
       int tempA = buf[2];
       int tempB = buf[3];
       String ALPHA_TEMP = String(((tempA * 256) + tempB) / 10);
-      alpha2.writeDigitAscii(0, ALPHA_TEMP[0]);
-      alpha2.writeDigitAscii(1, ALPHA_TEMP[1]);
-      alpha2.writeDigitAscii(2, ALPHA_TEMP[2]);
-      alpha2.writeDigitAscii(3, 'C');
-      alpha2.writeDisplay();
+      Serial.println(ALPHA_TEMP);
     }
 
     if (canId == 1552) {
       int speedA = buf[4];
       int speedB = buf[5];
       String ALPHA_SPEED = String(((speedA * 256) + speedB) / 100);
-      alpha0.writeDigitAscii(0, ALPHA_SPEED[0]);
-      alpha0.writeDigitAscii(1, ALPHA_SPEED[1]);
-      alpha0.writeDigitAscii(2, ALPHA_SPEED[2]);
-      alpha0.writeDigitAscii(3, 'M');
-      alpha0.writeDisplay();
+      Serial.println(ALPHA_SPEED);
     }
 
     if (canId == 1544) {
@@ -199,11 +129,7 @@ void loop() {
       int eopB = buf[1];
       int INT_EOP = ((((eopA * 256) + eopB) - 921) * 0.0145037738);
       String ALPHA_EOP = String((((eopA * 256) + eopB) - 921) * 0.0145037738);
-      alpha2.writeDigitAscii(0, ALPHA_EOP[0]);
-      alpha2.writeDigitAscii(1, ALPHA_EOP[1]);
-      alpha2.writeDigitAscii(2, ALPHA_EOP[2]);
-      alpha2.writeDigitAscii(3, 'P');
-      alpha2.writeDisplay();
+      Serial.println(ALPHA_EOP);
     }
   }
 }
@@ -220,7 +146,8 @@ void ledStrip_update(uint16_t LED_RPM) {
 
     if (prev_range != rpmConstrained) { //This makes it so we only update the LED when the range changes so we don't readdress the strip every reading
       prev_range = rpmConstrained;
-      clearStrip();
+      strip.clear(); 
+      strip.show();
       for (int ledNum = 0; ledNum <= rpmConstrained; ledNum++) {
         if (ledNum <= ledStages[1]) {
           strip.setPixelColor(ledNum, color[0]);
@@ -261,34 +188,28 @@ void ledStrip_update(uint16_t LED_RPM) {
   } else {
     if (prev_range != 10) {
       prev_range = 10;
-      clearStrip();
+      strip.clear(); 
+      strip.show();
     }
   }
 }
 
 
 
-// LED Strip Clear:
-void clearStrip() {
-  for (int ledNum = ledStages[0]; ledNum <= strip.numPixels(); ledNum++) {
-    strip.setPixelColor(ledNum, 0);
-  }
-  strip.show();
-}
-
-
-
 // First LED Blink:
 void blink_led(int count, int ms_delay, int colorInt) {
-  clearStrip();
+  strip.clear();
+  strip.show();
   strip.setBrightness(stripBrightness / 4);
   for (int i = 0; i < count; i++) {
     strip.setPixelColor(0, colorInt);
     strip.show();
     delay(ms_delay);
-    clearStrip();
+    strip.clear(); 
+    strip.show();
     delay(ms_delay / 2);
   }
   strip.setBrightness(stripBrightness);
-  clearStrip();
+  strip.clear(); 
+  strip.show();
 }
