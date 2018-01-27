@@ -22,7 +22,6 @@
 //led neopixel strip
 #define SPI_CS_PIN 9                                   // Declares D9 as CS for Seeed's CAN-BUS Shield.
 #define PIN 6                                          // Declares D6 for NeoPixel data.
-#define led_len 6
 
 
 //TLC59711
@@ -31,8 +30,8 @@
 #define clock 3 //PWM clock pin (any digital pin)
 #define ENG_LED 0
 #define OIL_LED 1
-#define WARN_ENG_TEMP 200
-#define WARN_EOP 200
+#define WARN_ENG_TEMP 200 //TBD
+#define WARN_EOP 200  //TBD
 
 
 //Library Initialization:
@@ -40,7 +39,7 @@ MCP_CAN CAN(SPI_CS_PIN);                                                        
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, PIN, NEO_GRB + NEO_KHZ800);      // Configures the NeoPixel Strip for 16 LEDs.
 
 
-//Define LED colors
+//Define LED colors, MAY CHANGE BRIGHTNESS
 uint32_t green = strip.Color(0, 20, 0),
          yellow = strip.Color(20, 20, 0),
          red = strip.Color(20, 0, 0),
@@ -58,7 +57,7 @@ Adafruit_TLC59711 LED = Adafruit_TLC59711(NUM_TLC59711, clock, data); // new obj
 
 //CAN parameters
 bool is_CBS_init = false; //True = CAN-Bus initialized succesfully. False = Not initialized yet.
-//char buffer[512];  //Data will be temporarily stored to this buffer before being written to the file
+//char buffer[512];  //Data will be temporarily stored to this buffer before being written to the file        IS THIS EVEN USED?????
 
 float LED_RPM;
 int shiftPT[2] = {2000, 10000}; //PLACEDHOLDER VALUES, TBD LATER
@@ -150,7 +149,7 @@ void loop()
   }
 }
 
-void ledStrip_update(uint16_t LED_RPM) //MODIFY TO CURRENT!!!
+void ledStrip_update(uint16_t LED_RPM)
 {
   unsigned long currentMillis = millis();
   if (LED_RPM >= shiftPT[0] && LED_RPM < shiftPT[1]) //if the RPM is between the activation pt and the shift pt
