@@ -10,6 +10,8 @@
    Adafruit_LEDBackpack.h
 
    Adafruit_GFX.h
+   
+   TimeOne.h
 
    ### Default Libraries:
    SPI.h
