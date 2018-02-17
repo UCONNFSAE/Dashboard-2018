@@ -44,7 +44,7 @@ long prevBlinkTime = 0;
 int
 prev_range = 10,
 shiftPT[2] = {2000, 10000},  // point 0 = the activation point 1 = warning point
-ledStages[8] = {0, 3, 5, 7, 9, 11, 13, 15}, // this is where each stage of the led strip is set. i.e. from ledStages[0] and ledStages[1] is stage one and so on
+ledStages[2] = {5, 11}, // this is where each stage of the led strip is set. i.e. from ledStages[0] and ledStages[0] is stage one and so on
 warningState = 0,
 blinkInterval = 150,  
 stripBrightness = 180;      // 0 = off, 255 = fullbright
@@ -62,10 +62,9 @@ void setup()
   strip.setBrightness(stripBrightness);
   strip.show(); // Initialize all pixels to 'off'
 
+  
 
-
-  while (!is_CBS_init)
-  {
+  do {
     if (CAN_OK == CAN.begin(CAN_1000KBPS)) {           // Initializes CAN-BUS Shield at specified baud rate. 
       Serial.println("CAN-BUS Shield Initialized!");
       blink_led(2, 150, color[0]); //WHY is this blinking?
@@ -78,7 +77,7 @@ void setup()
       blink_led(3, 500, color[2]);
       delay(1000);
     }
-  }
+  } while (!is_CBS_init);
 
 
 }
@@ -139,8 +138,9 @@ void loop() {
 // LED Strip Update
 void ledStrip_update(uint16_t LED_RPM) {
   unsigned long currentMillis = millis();
-  if (LED_RPM >= shiftPT[0] && LED_RPM < shiftPT[1]) { //if the RPM is between the activation pt and the shift pt
-    //map the RPM values to 9(really 8 since the shift point and beyond is handled below)and constrain the range
+  
+  if (LED_RPM >= shiftPT[0] && LED_RPM < shiftPT[1]) {                //if the RPM is between the activation pt and the shift pt
+                                                                      //map the RPM values to 9(really 8 since the shift point and beyond is handled below)and constrain the range
     int rpmMapped = map(LED_RPM, shiftPT[0], shiftPT[1], 0, 16);
     int rpmConstrained = constrain(rpmMapped, 0, 16);
 
@@ -149,13 +149,13 @@ void ledStrip_update(uint16_t LED_RPM) {
       strip.clear(); 
       strip.show();
       for (int ledNum = 0; ledNum <= rpmConstrained; ledNum++) {
-        if (ledNum <= ledStages[1]) {
+        if (ledNum <= ledStages[0]) {
           strip.setPixelColor(ledNum, color[0]);
         }
-        else if (ledNum > ledStages[1] && ledNum <= ledStages[2]) {
+        else if (ledNum > ledStages[0] && ledNum <= ledStages[1]) {
           strip.setPixelColor(ledNum, color[1]);
         }
-        else if (ledNum > ledStages[2] && ledNum < strip.numPixels()) {
+        else if (ledNum > ledStages[1] && ledNum < strip.numPixels()) {
           strip.setPixelColor(ledNum, color[2]);
         }
       }
@@ -168,20 +168,13 @@ void ledStrip_update(uint16_t LED_RPM) {
 
       if (warningState == 0) {
         warningState = 1;
-        for (int i = 0; i < strip.numPixels(); i = i + 2) {
+        for (int i = 0; i < strip.numPixels(); i++) {
           strip.setPixelColor(i, color[2]);
         }
-        for (int i = 1; i < strip.numPixels(); i = i + 2) {
-          strip.setPixelColor(i, 0);
-        }
+        
       } else {
         warningState = 0;
-        for (int i = 1; i < strip.numPixels(); i = i + 2) {
-          strip.setPixelColor(i, color[2]);
-        }
-        for (int i = 0; i < strip.numPixels(); i = i + 2) {
-          strip.setPixelColor(i, 0);
-        }
+        strip.clear();
       }
       strip.show();
     }
@@ -200,7 +193,7 @@ void ledStrip_update(uint16_t LED_RPM) {
 void blink_led(int count, int ms_delay, int colorInt) {
   strip.clear();
   strip.show();
-  strip.setBrightness(stripBrightness / 4);
+  //strip.setBrightness(stripBrightness / 4);
   for (int i = 0; i < count; i++) {
     strip.setPixelColor(0, colorInt);
     strip.show();
@@ -209,7 +202,7 @@ void blink_led(int count, int ms_delay, int colorInt) {
     strip.show();
     delay(ms_delay / 2);
   }
-  strip.setBrightness(stripBrightness);
+  //strip.setBrightness(stripBrightness);
   strip.clear(); 
   strip.show();
 }

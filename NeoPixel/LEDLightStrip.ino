@@ -19,6 +19,8 @@ void setup() {
   // put your setup code here, to run once:  
   strip.begin();
   strip.setBrightness(100);
+
+  //Startup Animation
   //lr4leds();
   for (int i = 0; i < 3; i ++) {
     lr2mid();
@@ -123,3 +125,4 @@ void lr4leds() {
     
   }
 }
+
