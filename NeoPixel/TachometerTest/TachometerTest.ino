@@ -21,7 +21,8 @@ void setup() {
   strip.setBrightness(100);
   //lr4leds();
   for (int i = 0; i < 3; i ++) {
-    lr2mid();
+    //lr2mid();
+    lr4leds();
   }
 }
 

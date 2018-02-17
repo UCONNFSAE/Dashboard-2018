@@ -1,6 +1,6 @@
 #include <Adafruit_NeoPixel.h>
 #include <Adafruit_TLC59711.h>
-#include <SPI.h>`
+#include <SPI.h>
 
 #define numPWM 1
 #define pwmClkPin 4
@@ -25,7 +25,8 @@ uint32_t redRGB = rgb.Color(255, 0, 0),
 yellowRGB = rgb.Color(255, 255, 0),
 greenRGB = rgb.Color(0, 255, 0),
 blueRGB = rgb.Color(0, 0, 255),
-whiteRGB = rgb.Color(255, 255, 255);
+whiteRGB = rgb.Color(255, 255, 255),
+rgbColor;
 
 uint32_t greenStrip = strip.Color(0, 20, 0),
          yellowStrip = strip.Color(20, 20, 0),
@@ -65,38 +66,46 @@ void setup() {
   //RGB digit setup
   rgb.begin();
   rgb.setBrightness(100);
-  Serial.begin(9600);
+  //Serial.begin(9600);
 
 }
 
 void loop() {
-
-  int stripRead = map(analogRead(2), 0, 1023, 0, 16);
+  int stripRead = map(analogRead(1), 0, 1023, 0, 17);
   int rgbRead = map(analogRead(0), 0, 1023, 0, 6);
   //Serial.println(rgbRead);
-  Serial.println(stripRead);
-  /*
+  //Serial.println(stripRead);
+
+  strip.clear();
+  strip.show();
+  for (int j = 0; j < 16; j++) {
+    if (j < stripRead) {
+      strip.setPixelColor(j, ledArray[j]);
+    }
+  }
+  strip.show();
+
+
+  // RGB digit - Gear Position
+  if (stripRead < 6) {
+    rgbColor = greenRGB;
+  }
+  else if (stripRead < 12 && stripRead >=5) {
+    rgbColor = yellowRGB;
+  }
+  else {
+    rgbColor = redRGB;
+  }
+  
+  //rgbColor = yellowRGB;
   rgb.clear();
   rgb.show();
-  
-  // RGB digit - Gear Position
   for (int i = 0; i < 9; i++) {
     if (digitArray[rgbRead][i]) {
-      rgb.setPixelColor(i, redRGB);
+      rgb.setPixelColor(i, rgbColor);
     }
   }
   rgb.show();
 
-/*
-  for (int j = 0; j < 16; j++) {
-    strip.setPixelColor(j, redStrip);
-  }
-  strip.show();
-  delay(1000);
-
-  strip.clear();
-  strip.show();
-  delay(1000);
-
- */ 
+  
 }
