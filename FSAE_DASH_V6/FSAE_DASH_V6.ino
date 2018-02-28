@@ -16,13 +16,17 @@
 #include <Adafruit_LEDBackpack.h>
 #include <Wire.h>
 #include <Adafruit_TLC59711.h>
-#include <TimerOne.h>
+//#include <TimerOne.h>
 
 
 //led neopixel strip
-#define SPI_CS_PIN 9                                   // Declares D9 as CS for Seeed's CAN-BUS Shield.
-#define PIN 6                                          // Declares D6 for NeoPixel data.
+#define stripLength 8                                 // NeoPixel LED strip length of 8
+#define SPI_CS_PIN 9                                  // Declares D9 as CS for Seeed's CAN-BUS Shield.
+#define stripDataPin 6                                // Declares D6 for NeoPixel data.
 
+//segment display
+#define segmentLength 8                               // Segment display "length" of 8
+#define segmentDataPin 7                              // D7 for Segment display data
 
 //TLC59711
 #define NUM_TLC59711 1 //amount of chips connected
@@ -36,16 +40,37 @@
 
 //Library Initialization:
 MCP_CAN CAN(SPI_CS_PIN);                                                        // Sets CS pin.
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, PIN, NEO_GRB + NEO_KHZ800);      // Configures the NeoPixel Strip for 16 LEDs.
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(stripLength, stripDataPin, NEO_GRB + NEO_KHZ800);      // Configures the NeoPixel Strip for 16 LEDs.
+Adafruit_NeoPixel seg = Adafruit_NeoPixel(segmentLength, segmentDataPin, NEO_GRB + NEO_KHZ800);     // Configures 7-segment display for 8(actually 7) segments
 
 
 //Define LED colors, MAY CHANGE BRIGHTNESS
-uint32_t green = strip.Color(0, 20, 0),
-         yellow = strip.Color(20, 20, 0),
-         red = strip.Color(20, 0, 0),
-         red_max = strip.Color(100, 0, 0),
-         blue = strip.Color(0, 0, 20),
-         color[4] = {green, yellow, red, red_max};
+uint32_t greenStrip = strip.Color(0, 20, 0),
+         yellowStrip = strip.Color(20, 20, 0),
+         redStrip = strip.Color(20, 0, 0),
+         redMaxStrip = strip.Color(100, 0, 0),
+         blueStrip = strip.Color(0, 0, 20),
+         color[4] = {greenStrip, yellowStrip, redStrip, redMaxStrip};
+
+
+//7 segment display
+int digitArray[7][8] = {
+                    {0, 0, 1, 0, 1, 0, 1, 0},  // n
+                    {0, 1, 1, 0, 0, 0, 0, 0},  // 1
+                    {1, 1, 0, 1, 1, 0, 1, 0},  // 2
+                    {1, 1, 1, 1, 0, 0, 1, 0},  // 3
+                    {0, 1, 1, 0, 0, 1, 1, 0},  // 4
+                    {1, 0, 1, 1, 0, 1, 1, 0},  // 5
+                    {1, 0, 1, 1, 1, 1, 1, 0}   // 6
+                    };
+
+uint32_t redSeg = seg.Color(255, 0, 0),
+         yellowSeg = seg.Color(255, 255, 0),
+         greenSeg = seg.Color(0, 255, 0),
+         blueSeg = seg.Color(0, 0, 255),
+         whiteSeg = seg.Color(255, 255, 255),
+         segColor,
+         prev_segColor;
 
 
 //TLC59711 parameters and initialization
@@ -63,14 +88,15 @@ float LED_RPM;
 int shiftPT[2] = {2000, 10000}; //PLACEDHOLDER VALUES, TBD LATER
 
 int prev_range = 10,
+    prev_gear = 0,        // Needed for gear position updating
     ledStages[2] = {5, 11}, // this is where each stage of the led strip is set. i.e. from ledStages[0] and ledStages[1] is stage one and so on
     warningState = 0,
     blinkInterval = 150,
     stripBrightness = 100;      // 0 = off, 255 = fullbright
 long prevBlinkTime = 0;
 
-int ENGINE_TEMP = 0,
-    INT_EOP = 0;
+//int ENGINE_TEMP = 0,
+//    INT_EOP = 0;
 
 void setup()
 {
@@ -79,26 +105,26 @@ void setup()
   strip.setBrightness(stripBrightness);
   strip.show();
 
-  Timer1.initialize(100000); //counts timer in microseconds
-  Timer1.attachInterrupt(WARNING_LED);
+  //Timer1.initialize(100000); //counts timer in microseconds
+  //Timer1.attachInterrupt(WARNING_LED);
 
   do //while(!is_CBS_init)
   {
     if (CAN_OK == CAN.begin(CAN_1000KBPS))  //Initializes CAN-BUS Shield at specified baud rate.
     {
-      Serial.println("CAN-BUS Shield Initialized!");
+      //Serial.println("CAN-BUS Shield Initialized!");
       //blink_led(2, 150, color[0]); //WHY is this blinking?
       is_CBS_init = true;
     }
     else
     {
-      Serial.println("CAN-BUS Shield FAILED!");
-      Serial.println("Retry initializing CAN-BUS Shield.");
+      //Serial.println("CAN-BUS Shield FAILED!");
+      //Serial.println("Retry initializing CAN-BUS Shield.");
       //blink_led(3, 500, color[2]);
       delay(1000);
     }
   }
-  while(!is_CBS_init)
+  while(!is_CBS_init);
 }
 
 void loop()
@@ -118,38 +144,42 @@ void loop()
       int ENGINE_RPM = ((rpmA * 256) + rpmB);
       String ALPHA_RPM = String(ENGINE_RPM / 10);
       ledStrip_update(ENGINE_RPM);
-      Serial.println(ALPHA_RPM);
+      //Serial.println(ALPHA_RPM);
     }
 
     if (canId == 1550)
     {
       int gearA = buf[2];
       int gearB = buf[3];
-      String ALPHA_GEAR = String((gearA * 256) + gearB - 2);
-      Serial.println(ALPHA_GEAR);
+      int GEAR = ((gearA * 256) + gearB - 2);
+      gearShift_update(GEAR, segColor);
+      String ALPHA_GEAR = String(GEAR);
+      //Serial.println(ALPHA_GEAR);
     }
   
     if (canId == 1542)
     {
       int tempA = buf[2];
       int tempB = buf[3];
-      ENGINE_TEMP = ((tempA * 256) + tempB) / 10;
+      int ENGINE_TEMP = ((tempA * 256) + tempB) / 10;
+      TEMP_warning(ENGINE_TEMP);
       String ALPHA_TEMP = String(ENGINE_TEMP);
-      Serial.println(ALPHA_TEMP);
+      //Serial.println(ALPHA_TEMP);
     }
 
     if (canId == 1544)
     {
       int eopA = buf[0];
       int eopB = buf[1];
-      INT_EOP = ((((eopA * 256) + eopB) - 921) * 0.0145037738);
+      int INT_EOP = ((((eopA * 256) + eopB) - 921) * 0.0145037738);
+      EOP_warning(INT_EOP);
       String ALPHA_EOP = String((((eopA * 256) + eopB) - 921) * 0.0145037738);
-      Serial.println(ALPHA_EOP);
+      //Serial.println(ALPHA_EOP);
     }
   }
 }
 
-void ledStrip_update(uint16_t LED_RPM)
+void ledStrip_update(int LED_RPM)
 {
   unsigned long currentMillis = millis();
   if (LED_RPM >= shiftPT[0] && LED_RPM < shiftPT[1]) //if the RPM is between the activation pt and the shift pt
@@ -163,19 +193,22 @@ void ledStrip_update(uint16_t LED_RPM)
       prev_range = rpmConstrained;
       strip.clear();
       strip.show();
-      for (int ledNum = 0; ledNum <= rpmConstrained; ledNum++)
+      for (int ledNum = 0; ledNum <= rpmConstrained; ledNum++) // rpmConstrained makes ledNum refer to one LED too muc on the light strip since the light strip is indexes from 0, causes brief moment of max rpm before flashing to change gear
       {
         if (ledNum <= ledStages[0])
         {
           strip.setPixelColor(ledNum, color[0]);
+          segColor = greenSeg;
         }
         else if (ledNum > ledStages[0] && ledNum <= ledStages[1])
         {
           strip.setPixelColor(ledNum, color[1]);
+          segColor = yellowSeg;
         }
         else if (ledNum > ledStages[1] && ledNum < strip.numPixels())
         {
           strip.setPixelColor(ledNum, color[2]);
+          segColor = redSeg;
         }
       }
       strip.show();
@@ -214,9 +247,26 @@ void ledStrip_update(uint16_t LED_RPM)
   }
 }
 
-void WARNING_LED() //Turn LED on when engine temp or oil pressure are outside safe parameters
+void gearShift_update(int gear, uint32_t segColor) // Update and display gear number on segment display
 {
-  if(ENGINE_TEMP > WARN_ENG_TEMP)
+  // Short-circuit Evaluation Optimization
+  if (prev_segColor != segColor || gear != prev_gear) {
+    prev_segColor = segColor;
+    prev_gear = gear;
+    seg.clear();
+    seg.show();
+    for(int i = 0; i <= 8; i++)
+    {
+      if(digitArray[gear][i])
+        seg.setPixelColor(i, segColor);
+    }
+    seg.show();
+  }
+}
+
+void TEMP_warning(int engine_temp) // Turn LED on when engine temp is outside safe parameters
+{
+  if(engine_temp > WARN_ENG_TEMP)
   {
     LED.setPWM(ENG_LED, PWM_LEVEL);
     LED.write();
@@ -226,8 +276,11 @@ void WARNING_LED() //Turn LED on when engine temp or oil pressure are outside sa
     LED.setPWM(ENG_LED, 0);
     LED.write();
   }
+}
 
-  if(INT_EOP > WARN_EOP)
+void EOP_warning(uint16_t EOP) // Turn LED on when oil pressure is outside safe parameters
+{
+  if(EOP > WARN_EOP)
   {
     LED.setPWM(OIL_LED, PWM_LEVEL);
     LED.write();
