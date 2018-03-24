@@ -86,7 +86,7 @@ bool is_CBS_init = false; //True = CAN-Bus initialized succesfully. False = Not 
 //char buffer[512];  //Data will be temporarily stored to this buffer before being written to the file        IS THIS EVEN USED?????
 
 float LED_RPM;
-int shiftPT[2] = {1800, 2800}; //PLACEDHOLDER VALUES, TBD LATER
+int shiftPT[2] = {2300, 10500}; //PLACEDHOLDER VALUES, TBD LATER
 
 int prev_range = 10,
     prev_gear = 10,        // Needed for gear position updating
@@ -102,6 +102,28 @@ long prevBlinkTime = 0;
 void setup()
 {
   Serial.begin(115200);
+ 
+  //Timer1.initialize(100000); //counts timer in microseconds
+  //Timer1.attachInterrupt(WARNING_LED);
+
+  do //while(!is_CBS_init)
+  {
+    if (CAN_OK == CAN.begin(CAN_1000KBPS))  //Initializes CAN-BUS Shield at specified baud rate.
+    {
+      Serial.println("CAN-BUS Shield Initialized!");
+      blink_led(2, 150, color[0]);
+      is_CBS_init = true;
+    }
+    else
+    {
+      Serial.println("CAN-BUS Shield FAILED!");
+      Serial.println("Retry initializing CAN-BUS Shield.");
+      blink_led(3, 500, color[2]);
+      delay(1000);
+    }
+  }
+  while(!is_CBS_init);
+
   strip.begin();
   strip.setBrightness(stripBrightness);
   strip.clear();
@@ -113,27 +135,6 @@ void setup()
   seg.show();
 
   LED.begin();
-
-  //Timer1.initialize(100000); //counts timer in microseconds
-  //Timer1.attachInterrupt(WARNING_LED);
-
-  while(!is_CBS_init)
-  {
-    if (CAN_OK == CAN.begin(CAN_1000KBPS))  //Initializes CAN-BUS Shield at specified baud rate.
-    {
-      Serial.println("CAN-BUS Shield Initialized!");
-      //blink_led(2, 150, color[0]); //WHY is this blinking?
-      is_CBS_init = true;
-    }
-    else
-    {
-      Serial.println("CAN-BUS Shield FAILED!");
-      Serial.println("Retry initializing CAN-BUS Shield.");
-      //blink_led(3, 500, color[2]);
-      delay(1000);
-    }
-  }
-  //while(!is_CBS_init);
 }
 
 void loop()
@@ -271,7 +272,7 @@ void gearShift_update(int gear, uint32_t segColor) // Update and display gear nu
     prev_gear = gear;
     seg.clear();
     seg.show();
-    for(int i = 0; i <= 8; i++)
+    for(int i = 0; i < 8; i++)
     {
       if(digitArray[gear][i])
         seg.setPixelColor(i, segColor);
