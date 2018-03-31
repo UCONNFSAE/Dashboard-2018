@@ -14,38 +14,42 @@
 #include <mcp_can.h>
 #include <SPI.h>
 #include <Adafruit_NeoPixel.h>
-#include <Adafruit_LEDBackpack.h>
-#include <Wire.h>
 #include <Adafruit_TLC59711.h>
-//#include <TimerOne.h>
 
-
-//led neopixel strip
-#define stripLength 16                                 // NeoPixel LED strip length of 8
+// LED neopixel strip parameters
 #define SPI_CS_PIN 9                                  // Declares D9 as CS for Seeed's CAN-BUS Shield.
-#define stripDataPin 5                                // Declares D3 for NeoPixel data.
+#define stripLength 16                                // NeoPixel LED strip length of 16
+#define stripDataPin 5                                // Declares D5 for strip data.
 
-//segment display
+// Segment display paramaters
 #define segmentLength 8                               // Segment display "length" of 8
-#define segmentDataPin 3                              // D5 for Segment display data
+#define segmentDataPin 3                              // D3 for segment display data
 
-//TLC59711
-#define NUM_TLC59711 1 //amount of chips connected
-#define data 8 //PWM data pin (any digital pin)
-#define clock 7 //PWM clock pin (any digital pin)
-#define ENG_LED 0
-#define OIL_LED 1
-#define WARN_ENG_TEMP 80 //TBD
-#define WARN_EOP 45  //TBD
+#define brightness 100                           // 0 = off, 255 = fullbright
 
+// TLC59711 parameters
+#define NUM_TLC59711 1 // amount of chips connected
+#define data 8         // PWM data pin (any digital pin)
+#define clock 7        // PWM clock pin (any digital pin)
+#define ENG_LED 0      // engine LED R0
+#define OIL_LED 1      // EOP LED G0
+#define DUTY 10        // values from 0 to 100% representing duty cycle
 
-//Library Initialization:
-MCP_CAN CAN(SPI_CS_PIN);                                                        // Sets CS pin.
+// Engine parameters                                         CHANGE VALUES HERE
+#define low_rpm 2200
+#define high_rpm 10000
+#define WARN_ENG_TEMP 90
+#define WARN_EOP 55
+
+// Library Initializations:
+MCP_CAN CAN(SPI_CS_PIN);      // Sets CS pin.
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(stripLength, stripDataPin, NEO_GRB + NEO_KHZ800);      // Configures the NeoPixel Strip for 16 LEDs.
 Adafruit_NeoPixel seg = Adafruit_NeoPixel(segmentLength, segmentDataPin, NEO_GRB + NEO_KHZ800);     // Configures 7-segment display for 8(actually 7) segments
 
+uint16_t PWM_LEVEL = map(DUTY, 0, 100, 0, 65535); // (DUTY/100) * 65535; PWM value ranges from 0 to 65535
+Adafruit_TLC59711 LED = Adafruit_TLC59711(NUM_TLC59711, clock, data); // initialization with parameters (chip amount, clock pin, data pin)
 
-//Define LED colors, MAY CHANGE BRIGHTNESS
+// Define LED colors, MAY CHANGE BRIGHTNESS
 uint32_t greenStrip = strip.Color(0, 20, 0),
          yellowStrip = strip.Color(20, 20, 0),
          redStrip = strip.Color(20, 0, 0),
@@ -53,18 +57,27 @@ uint32_t greenStrip = strip.Color(0, 20, 0),
          blueStrip = strip.Color(0, 0, 20),
          color[4] = {greenStrip, yellowStrip, redStrip, redMaxStrip};
 
-
-//7 segment display
-int digitArray[7][8] = {
-                    {0, 0, 1, 0, 1, 0, 1, 0},  // n
-                    {0, 1, 1, 0, 0, 0, 0, 0},  // 1
-                    {1, 1, 0, 1, 1, 0, 1, 0},  // 2
-                    {1, 1, 1, 1, 0, 0, 1, 0},  // 3
-                    {0, 1, 1, 0, 0, 1, 1, 0},  // 4
-                    {1, 0, 1, 1, 0, 1, 1, 0},  // 5
-                    {1, 0, 1, 1, 1, 1, 1, 0}   // 6
+// 7 segment display gear
+int digitArray[7][8] = {                       //                            ___________      
+                    {0, 0, 1, 0, 1, 0, 1, 0},  // n                         |     0     |
+                    {0, 1, 1, 0, 0, 0, 0, 0},  // 1                         |  5     1  |
+                    {1, 1, 0, 1, 1, 0, 1, 0},  // 2                         |     6     |
+                    {1, 1, 1, 1, 0, 0, 1, 0},  // 3                         |  4     2  |
+                    {0, 1, 1, 0, 0, 1, 1, 0},  // 4                         |     3     |
+                    {1, 0, 1, 1, 0, 1, 1, 0},  // 5                         |_________7_|
+                    {1, 0, 1, 1, 1, 1, 1, 0}   // 6                         
                     };
 
+// 7 segment display startup animation
+int digitHello[5][8] = {
+                    {0, 1, 1, 0, 1, 1, 1, 0}, //H
+                    {1, 0, 0, 1, 1, 1, 1, 0}, //E
+                    {0, 0, 0, 1, 1, 1, 0, 0}, //L
+                    {0, 0, 0, 1, 1, 1, 0, 0}, //L
+                    {1, 1, 1, 1, 1, 1, 0, 0}  //O
+                    };
+
+// 7 segment display colors
 uint32_t redSeg = seg.Color(255, 0, 0),
          yellowSeg = seg.Color(255, 255, 0),
          greenSeg = seg.Color(0, 255, 0),
@@ -73,56 +86,30 @@ uint32_t redSeg = seg.Color(255, 0, 0),
          segColor = greenSeg,
          prev_segColor;
 
+// CAN parameters
+bool is_CBS_init = false; // True = CAN-Bus initialized succesfully. False = Not initialized yet.
 
-//TLC59711 parameters and initialization
-uint8_t DUTY = 10; // Values range from 1 to 100% to determine duty cycle
-uint16_t PWM_LEVEL = map(DUTY, 0, 100, 0, 65535); //(DUTY/100) * 65535; // PWM value ranges from 0 to 65535
-volatile int next_state = 0;
-Adafruit_TLC59711 LED = Adafruit_TLC59711(NUM_TLC59711, clock, data); // new object with parameters (chip amount, clock pin, data pin)
+//float LED_RPM;
+int shiftPT[2] = {low_rpm, high_rpm};
 
-
-//CAN parameters
-bool is_CBS_init = false; //True = CAN-Bus initialized succesfully. False = Not initialized yet.
-//char buffer[512];  //Data will be temporarily stored to this buffer before being written to the file        IS THIS EVEN USED?????
-
-float LED_RPM;
-int shiftPT[2] = {1800, 2800}; //PLACEDHOLDER VALUES, TBD LATER
-
-int prev_range = 10,
-    prev_gear = 10,        // Needed for gear position updating
+int prev_range = 10,        // needed for tachometer updating
+    prev_gear = 10,         // needed for gear position updating
     ledStages[2] = {5, 11}, // this is where each stage of the led strip is set. i.e. from ledStages[0] and ledStages[1] is stage one and so on
-    warningState = 0,
-    blinkInterval = 50,
-    stripBrightness = 100;      // 0 = off, 255 = fullbright
-long prevBlinkTime = 0;
-
-//int ENGINE_TEMP = 0,
-//    INT_EOP = 0;
+    warningState = 0,       // allows warning to oscillate
+    blinkInterval = 50;    // warning flash interval
+long prevBlinkTime = 0;     // timer for warning flash interval
+bool off = false;           // gear indicator off when engine is off
 
 void setup()
 {
-  Serial.begin(115200);
-  strip.begin();
-  strip.setBrightness(stripBrightness);
-  strip.clear();
-  strip.show();
+  Serial.begin(115200);     // comment out all Serials when not testing
 
-  seg.begin();
-  seg.setBrightness(stripBrightness);
-  seg.clear();
-  seg.show();
-
-  LED.begin();
-
-  //Timer1.initialize(100000); //counts timer in microseconds
-  //Timer1.attachInterrupt(WARNING_LED);
-
-  while(!is_CBS_init)
+  do
   {
-    if (CAN_OK == CAN.begin(CAN_1000KBPS))  //Initializes CAN-BUS Shield at specified baud rate.
+    if (CAN_OK == CAN.begin(CAN_1000KBPS))  // initializes CAN-BUS Shield at specified baud rate.
     {
       Serial.println("CAN-BUS Shield Initialized!");
-      //blink_led(2, 150, color[0]); //WHY is this blinking?
+      //blink_led(2, 150, color[0]);
       is_CBS_init = true;
     }
     else
@@ -133,17 +120,31 @@ void setup()
       delay(1000);
     }
   }
-  //while(!is_CBS_init);
+  while(!is_CBS_init);
+
+  // begin NeoPixel strip
+  strip.begin();
+  strip.setBrightness(brightness);
+  strip.clear();
+  strip.show();
+
+  // begin segment display
+  seg.begin();
+  seg.setBrightness(brightness);
+  seg.clear();
+  seg.show();
+
+  LED.begin();
+
+  startupAnimation();
 }
 
 void loop()
 {
   unsigned char len = 0;
   unsigned char buf[8];
-  //Serial.println("before");
   if(CAN_MSGAVAIL == CAN.checkReceive()) //Checks for incoming data.
   {
-    //Serial.println("after");
     CAN.readMsgBuf(&len, buf);           //Reads incoming data. len: data length, buf[location]: actual data.
     unsigned long canId = CAN.getCanId();
   
@@ -153,18 +154,20 @@ void loop()
       int rpmB = buf[1];
       int ENGINE_RPM = ((rpmA * 256) + rpmB);
       ledStrip_update(ENGINE_RPM);
+      //gearOFF(ENGINE_RPM);
       String ALPHA_RPM = String(ENGINE_RPM);
-      //Serial.println("RPM: " + ALPHA_RPM + "\n");
+      Serial.println("RPM: " + ALPHA_RPM + "\n");
     }
 
     if (canId == 1550)
     {
       int gearA = buf[2];
       int gearB = buf[3];
-      int GEAR = ((gearA * 256) + gearB - 2);
+      //int GEAR = ((gearA * 256) + gearB - 2); // why -2?
+      int GEAR = ((gearA * 256) + gearB);
       gearShift_update(GEAR, segColor);
       String ALPHA_GEAR = String(GEAR);
-      //Serial.println("GEAR: " + ALPHA_GEAR + "\n");
+      Serial.println("GEAR: " + ALPHA_GEAR + "\n");
     }
   
     if (canId == 1542)
@@ -174,38 +177,38 @@ void loop()
       int ENGINE_TEMP = ((tempA * 256) + tempB) / 10;
       TEMP_warning(ENGINE_TEMP);
       String ALPHA_TEMP = String(ENGINE_TEMP);
-      //Serial.println("ENG TEMP: " + ALPHA_TEMP + "\n");
+      Serial.println("ENG TEMP: " + ALPHA_TEMP + "\n");
     }
 
     if (canId == 1544)
     {
       int eopA = buf[0];
       int eopB = buf[1];
-      //int INT_EOP = ((((eopA * 256) + eopB) - 921) * 0.0145037738);
-      int INT_EOP = (((eopA * 256) + eopB)*0.0145037738);
+      //int INT_EOP = ((((eopA * 256) + eopB) - 921) * 0.0145037738); // why -921?
+      int INT_EOP = (((eopA * 256) + eopB) * 0.0145037738); //millibars to PSI conversion
       EOP_warning(INT_EOP);
       String ALPHA_EOP = String(INT_EOP);
-      //Serial.println("EOP: " + ALPHA_EOP + "\n");
+      Serial.println("EOP: " + ALPHA_EOP + "\n");
     }
   }
-  //Serial.println("afterafter");
 }
 
-void ledStrip_update(int LED_RPM)
+void ledStrip_update(int rpm)
 {
+  int LED_RPM = rpm;
   unsigned long currentMillis = millis();
-  if (LED_RPM >= shiftPT[0] && LED_RPM < shiftPT[1]) //if the RPM is between the activation pt and the shift pt
+  if (LED_RPM >= shiftPT[0] && LED_RPM < shiftPT[1]) // if the RPM is between the activation pt and the shift pt
   {
-    //map the RPM values to 9(really 8 since the shift point and beyond is handled below) and constrain the range
+    // map the RPM values to 9(really 8 since the shift point and beyond is handled below) and constrain the range
     int rpmMapped = map(LED_RPM, shiftPT[0], shiftPT[1], 0, 16);
     int rpmConstrained = constrain(rpmMapped, 0, 16);
 
-    if (prev_range != rpmConstrained) //This makes it so we only update the LED when the range changes so we don't readdress the strip every reading
+    if (prev_range != rpmConstrained)                // this makes it so we only update the LED when the range changes so we don't readdress the strip every reading
     {
       prev_range = rpmConstrained;
       strip.clear();
-      strip.show();
-      for (int ledNum = 0; ledNum <= rpmConstrained; ledNum++) // rpmConstrained makes ledNum refer to one LED too muc on the light strip since the light strip is indexes from 0, causes brief moment of max rpm before flashing to change gear
+      for (int ledNum = 0; ledNum <= rpmConstrained; ledNum++) // rpmConstrained makes ledNum refer to one LED too muc on the light strip since the light strip is indexes from 0,
+                                                               // causes brief moment of max rpm before flashing to change gear
       {
         if (ledNum <= ledStages[0])
         {
@@ -248,8 +251,6 @@ void ledStrip_update(int LED_RPM)
         strip.show();
         warningState = 0;
       }
-      //strip.show();
-      //Serial.println(warningState);
     }
   }
   else
@@ -263,15 +264,30 @@ void ledStrip_update(int LED_RPM)
   }
 }
 
-void gearShift_update(int gear, uint32_t segColor) // Update and display gear number on segment display
+void gearOFF(int rpm)
 {
-  // Short-circuit Evaluation Optimization
-  if (prev_segColor != segColor || gear != prev_gear) {
+  if(rpm == 0)
+  {
+    seg.clear();
+    seg.show();
+    off = true;
+  }
+  else
+  {
+    off = false;
+    prev_segColor = whiteSeg;
+  }
+}
+
+void gearShift_update(int gear, uint32_t segColor) // update and display gear number on segment display
+{
+  // short-circuit evaluation optimization
+  if ((prev_segColor != segColor || gear != prev_gear) && off == false) {
     prev_segColor = segColor;
     prev_gear = gear;
     seg.clear();
     seg.show();
-    for(int i = 0; i <= 8; i++)
+    for(int i = 0; i <= 7; i++)
     {
       if(digitArray[gear][i])
         seg.setPixelColor(i, segColor);
@@ -280,13 +296,12 @@ void gearShift_update(int gear, uint32_t segColor) // Update and display gear nu
   }
 }
 
-void TEMP_warning(int engine_temp) // Turn LED on when engine temp is outside safe parameters
+void TEMP_warning(int engine_temp) // turn LED on when engine temp is outside safe parameters
 {
   if(engine_temp >= WARN_ENG_TEMP)
   {
     LED.setPWM(ENG_LED, PWM_LEVEL);
     LED.write();
-    //Serial.println("TEMP WARNING");
   }
   else
   {
@@ -295,19 +310,35 @@ void TEMP_warning(int engine_temp) // Turn LED on when engine temp is outside sa
   }
 }
 
-void EOP_warning(int EOP) // Turn LED on when oil pressure is outside safe parameters
+void EOP_warning(int EOP) // turn LED on when oil pressure is outside safe parameters
 {
   if(EOP >= WARN_EOP)
   {
     LED.setPWM(OIL_LED, PWM_LEVEL);
     LED.write();
-    //Serial.println("OIL WARNING");
   }
   else
   {
     LED.setPWM(OIL_LED, 0);
     LED.write();
   }
+}
+
+void startupAnimation()
+{
+  for(int i = 0; i <= 4; i++)
+  {
+    for(int j = 0; j <= 7; j++)
+    {
+      if(digitHello[i][j])
+        seg.setPixelColor(j, blueSeg);
+    }
+    seg.show();
+    delay(500);
+    seg.clear();
+  }
+  seg.clear();
+  seg.show();
 }
 
 void blink_led(int count, int ms_delay, int colorInt)
@@ -326,4 +357,3 @@ void blink_led(int count, int ms_delay, int colorInt)
   strip.clear();
   strip.show();
 }
-
