@@ -58,13 +58,13 @@ uint32_t greenStrip = strip.Color(0, 20, 0),
          color[4] = {greenStrip, yellowStrip, redStrip, redMaxStrip};
 
 // 7 segment display gear
-int digitArray[7][8] = {                       //                            ___________      
-                    {0, 0, 1, 0, 1, 0, 1, 0},  // n                         |     0     |
-                    {0, 1, 1, 0, 0, 0, 0, 0},  // 1                         |  5     1  |
-                    {1, 1, 0, 1, 1, 0, 1, 0},  // 2                         |     6     |
-                    {1, 1, 1, 1, 0, 0, 1, 0},  // 3                         |  4     2  |
-                    {0, 1, 1, 0, 0, 1, 1, 0},  // 4                         |     3     |
-                    {1, 0, 1, 1, 0, 1, 1, 0},  // 5                         |_________7_|
+int digitArray[7][8] = {                       //                            ___________                ___________      
+                    {0, 0, 1, 0, 1, 0, 1, 0},  // n                         |     0     |              |     a     |
+                    {0, 1, 1, 0, 0, 0, 0, 0},  // 1                         |  5     1  |              |  f     b  |
+                    {1, 1, 0, 1, 1, 0, 1, 0},  // 2                         |     6     |              |     g     |
+                    {1, 1, 1, 1, 0, 0, 1, 0},  // 3                         |  4     2  |              |  e     c  |
+                    {0, 1, 1, 0, 0, 1, 1, 0},  // 4                         |     3     |              |     d     |
+                    {1, 0, 1, 1, 0, 1, 1, 0},  // 5                         |_________7_|              |_________h_|
                     {1, 0, 1, 1, 1, 1, 1, 0}   // 6                         
                     };
 
@@ -79,15 +79,14 @@ int digitHello[5][8] = {
 
 // 7 segment display colors
 uint32_t redSeg = seg.Color(255, 0, 0),
+         orangeSeg = seg.Color(255, 165, 0),
          yellowSeg = seg.Color(255, 255, 0),
          greenSeg = seg.Color(0, 255, 0),
          blueSeg = seg.Color(0, 0, 255),
+         purpleSeg = seg.Color(255, 0, 255),
          whiteSeg = seg.Color(255, 255, 255),
          segColor = greenSeg,
          prev_segColor;
-
-// CAN parameters
-bool is_CBS_init = false; // True = CAN-Bus initialized succesfully. False = Not initialized yet.
 
 //float LED_RPM;
 int shiftPT[2] = {low_rpm, high_rpm};
@@ -106,11 +105,15 @@ void setup()
 
   do
   {
+
+    break;          // TEMPORARY - NEEDED FOR TESTING STARTUP ANIMATIONS
+
+    
     if (CAN_OK == CAN.begin(CAN_1000KBPS))  // initializes CAN-BUS Shield at specified baud rate.
     {
       Serial.println("CAN-BUS Shield Initialized!");
       //blink_led(2, 150, color[0]);
-      is_CBS_init = true;
+      break;
     }
     else
     {
@@ -120,7 +123,7 @@ void setup()
       delay(1000);
     }
   }
-  while(!is_CBS_init);
+  while(true);
 
   // begin NeoPixel strip
   strip.begin();
@@ -128,7 +131,7 @@ void setup()
   strip.clear();
   strip.show();
 
-  // begin segment display
+  // begin 7-segment display
   seg.begin();
   seg.setBrightness(brightness);
   seg.clear();
@@ -163,8 +166,8 @@ void loop()
     {
       int gearA = buf[2];
       int gearB = buf[3];
-      //int GEAR = ((gearA * 256) + gearB - 2); // why -2?
-      int GEAR = ((gearA * 256) + gearB);
+      int GEAR = ((gearA * 256) + gearB - 2); // why -2? That's how the signal is sent from the ECU through the CAN-bus
+      //int GEAR = ((gearA * 256) + gearB);
       gearShift_update(GEAR, segColor);
       String ALPHA_GEAR = String(GEAR);
       Serial.println("GEAR: " + ALPHA_GEAR + "\n");
@@ -326,6 +329,7 @@ void EOP_warning(int EOP) // turn LED on when oil pressure is outside safe param
 
 void startupAnimation()
 {
+/*  
   for(int i = 0; i <= 4; i++)
   {
     for(int j = 0; j <= 7; j++)
@@ -339,6 +343,107 @@ void startupAnimation()
   }
   seg.clear();
   seg.show();
+*/
+
+
+  uint32_t cycleColor[6] = {whiteSeg, purpleSeg, blueSeg, greenSeg, yellowSeg, redSeg};
+/*
+  //seg.setPixelColor(6, seg.Color(128, 128, 128));
+  for (int i = 0; i < 16; i++) {
+    for (int j = 0; j < 6; j++) {
+      seg.setPixelColor(j, cycleColor[i % 3]);
+      seg.show();
+      delay(25);
+    }
+  }
+  seg.clear();
+  seg.show();
+*/
+
+
+  for (int i = 0; i < 16; i++) {
+    strip.setPixelColor(i, whiteSeg);
+  }
+  strip.show();
+  
+
+  
+  
+  for (int i = 0; i < 6; i++) {
+    seg.setPixelColor(7, cycleColor[i]);
+    seg.show();
+    delay(100);
+  
+    seg.setPixelColor(2, cycleColor[i]);
+    seg.setPixelColor(3, cycleColor[i]);
+    seg.show();
+    delay(100);
+  
+    seg.setPixelColor(1, cycleColor[i]);
+    seg.setPixelColor(4, cycleColor[i]);
+    seg.setPixelColor(6, cycleColor[i]);
+    seg.show();
+    delay(100);
+  
+    seg.setPixelColor(0, cycleColor[i]);
+    seg.setPixelColor(5, cycleColor[i]);
+    seg.show();
+    delay(100);
+  }
+
+
+/*
+  for (int i = 0; i < 5; i++) {
+    seg.setPixelColor(0, blueSeg);
+    seg.setPixelColor(6, blueSeg);
+    seg.show();
+    delay(100);
+
+    seg.clear();
+
+    seg.setPixelColor(1, blueSeg);
+    seg.setPixelColor(2, blueSeg);
+    seg.show();
+    delay(100);
+
+    seg.clear();
+
+    seg.setPixelColor(3, blueSeg);
+    seg.setPixelColor(6, blueSeg);
+    seg.show();
+    delay(100);
+
+    seg.clear();
+
+    seg.setPixelColor(4, blueSeg);
+    seg.setPixelColor(5, blueSeg);
+    seg.show();
+    delay(100);
+
+    seg.clear();
+  }
+
+  seg.clear();
+  seg.show();
+*/
+
+/* Color testing
+  for (int i = 0; i < 8; i++) {
+    seg.setPixelColor(i, Seg);
+  }
+  seg.show();
+  delay(10000);
+
+  seg.clear();
+  seg.show();
+
+*/
+
+  seg.clear();
+  seg.show();
+
+  strip.clear();
+  strip.show();
 }
 
 void blink_led(int count, int ms_delay, int colorInt)
