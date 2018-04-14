@@ -6,14 +6,12 @@
    mcp_can.h
 
    Adafruit_NeoPixel.h
-
-   Adafruit_LEDBackpack.h
-
-   Adafruit_GFX.h
    
-   TimeOne.h
+   Adafruit_TLC59711.h
 
    ### Default Libraries:
    SPI.h
-
-   Wire.h
+   
+   avr/io.h
+   
+   avr/interrupt.h
