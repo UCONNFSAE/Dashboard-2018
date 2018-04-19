@@ -15,21 +15,23 @@
 #include <SPI.h>
 #include <Adafruit_NeoPixel.h>
 #include <Adafruit_TLC59711.h>
-#include <avr/io.h>
-#include <avr/interrupt.h>
 
-// LED neopixel strip parameters
+// LED NeoPixel strip parameters
 #define SPI_CS_PIN 9                                  // Declares D9 as CS for Seeed's CAN-BUS Shield.
 #define stripLength 16                                // NeoPixel LED strip length of 16
 #define stripDataPin 5                                // Declares D5 for strip data.
+#define blinkInterval 50
 
 // Segment display paramaters
 #define segmentLength 7                               // Segment display length of 7
 #define segmentDataPin 3                              // D3 for segment display data
 
+// Neutral digital read pin
 #define neutralPin 6
 
-#define brightness 100                                // 0 = off, 255 = fullbright
+// Absolute brightness control for LEDs
+#define stripBrightness 200                                // 0 = off, 255 = fullbright
+#define segBrightness 255
 
 // TLC59711 parameters
 #define NUM_TLC59711 1 // amount of chips connected
@@ -55,11 +57,11 @@ uint16_t PWM_LEVEL = map(DUTY, 0, 100, 0, 65535); // (DUTY/100) * 65535; PWM val
 Adafruit_TLC59711 LED = Adafruit_TLC59711(NUM_TLC59711, clock, data); // initialization with parameters (chip amount, clock pin, data pin)
 
 // Define LED colors, MAY CHANGE BRIGHTNESS
-uint32_t greenStrip = strip.Color(0, 20, 0),
-         yellowStrip = strip.Color(20, 20, 0),
-         redStrip = strip.Color(20, 0, 0),
-         redMaxStrip = strip.Color(100, 0, 0),
-         blueStrip = strip.Color(0, 0, 20),
+uint32_t greenStrip = strip.Color(0, 50, 0),
+         yellowStrip = strip.Color(50, 50, 0),
+         redStrip = strip.Color(50, 0, 0),
+         redMaxStrip = strip.Color(150, 0, 0),
+         blueStrip = strip.Color(0, 0, 50),
          color[4] = {greenStrip, yellowStrip, redStrip, redMaxStrip};
 
 // 7 segment display gear
@@ -72,15 +74,6 @@ int digitArray[7][7] = {                    //                            ______
                     {1, 0, 1, 1, 0, 1, 1},  // 5                         |_________7_|
                     {1, 0, 1, 1, 1, 1, 1}   // 6                         
                     };
-/*
-// 7 segment display startup animation
-int digitHello[5][8] = {
-                    {0, 1, 1, 0, 1, 1, 1, 0}, //H
-                    {1, 0, 0, 1, 1, 1, 1, 0}, //E
-                    {0, 0, 0, 1, 1, 1, 0, 0}, //L
-                    {0, 0, 0, 1, 1, 1, 0, 0}, //L
-                    {1, 1, 1, 1, 1, 1, 0, 0}  //O
-                    };*/
 
 int digitCircle[6][7] = {
                     {1, 0, 0, 0, 0, 0, 0},
@@ -98,78 +91,73 @@ uint32_t redSeg = seg.Color(255, 0, 0),
          blueSeg = seg.Color(0, 0, 255),
          whiteSeg = seg.Color(255, 255, 255),
          segColor = greenSeg,
-         prev_segColor;
+         prev_segColor = greenSeg;
 
-// CAN parameters
-//bool is_CBS_init = false; // True = CAN-Bus initialized succesfully. False = Not initialized yet.
-
-//float LED_RPM;
 int shiftPT[2] = {low_rpm, high_rpm};
 
 int prev_range = 10,        // needed for tachometer updating
     prev_gear = 10,         // needed for gear position updating
     ledStages[2] = {5, 11}, // this is where each stage of the led strip is set. i.e. from ledStages[0] and ledStages[1] is stage one and so on
-    warningState = 0,       // allows warning to oscillate
-    blinkInterval = 50;     // warning flash interval
+    warningState = 0;       // allows warning to oscillate
 long prevBlinkTime = 0;     // timer for warning flash interval
-bool off = false;           // gear indicator off when engine is off
-int ENGINE_TEMP = 0;
-int INT_EOP = 0;
 
-volatile int count = 0;
-volatile bool eng_state = false;
-volatile bool eop_state = false;
+//bool off = false;           // gear indicator off when engine is off
+
+bool eng_state = false;
+bool eop_state = false;
 
 void setup()
 {
-  Serial.begin(115200);     // comment out all Serials when not testing
-
+  //Serial.begin(115200);     // comment out all Serials when not testing
   do
   {
     if (CAN_OK == CAN.begin(CAN_1000KBPS))  // initializes CAN-BUS Shield at specified baud rate.
     {
-      Serial.println("CAN-BUS Shield Initialized!");
+      //Serial.println("CAN-BUS Shield Initialized!");
       //is_CBS_init = true;
       break;
     }
     else
     {
-      Serial.println("CAN-BUS Shield FAILED!");
-      Serial.println("Retry initializing CAN-BUS Shield.");
+      //Serial.println("CAN-BUS Shield FAILED!");
+      //Serial.println("Retry initializing CAN-BUS Shield.");
       delay(1000);
     }
   }
   while(true);
+
+  prev_range = 10;
+  prev_gear = 10;
   
-  pinMode(neutralPin, INPUT);
+  pinMode(neutralPin, INPUT); // sets neutralPin (pin 6) as input
   
   // begin NeoPixel strip
   strip.begin();
-  strip.setBrightness(brightness);
+  strip.setBrightness(stripBrightness);
   strip.clear();
   strip.show();
 
   // begin segment display
   seg.begin();
-  seg.setBrightness(brightness);
+  seg.setBrightness(segBrightness);
   seg.clear();
   seg.show();
 
   LED.begin();
   
   startupAnimation();
-  //init_timer1();
 }
 
 void loop()
 {
   unsigned char len = 0;
-  unsigned char buf[8];
+  unsigned char buf[4];
   if(CAN_MSGAVAIL == CAN.checkReceive()) //Checks for incoming data.
   {
     CAN.readMsgBuf(&len, buf);           //Reads incoming data. len: data length, buf[location]: actual data.
-    unsigned long canId = CAN.getCanId();
-  
+    unsigned int canId = CAN.getCanId();
+    //String id = String(canId);
+    //Serial.println(id);
     if (canId == 1536)
     {
       int rpmA = buf[0];
@@ -177,29 +165,28 @@ void loop()
       int ENGINE_RPM = ((rpmA * 256) + rpmB);
       ledStrip_update(ENGINE_RPM);
       //gearOFF(ENGINE_RPM);
-      String ALPHA_RPM = String(ENGINE_RPM);
-      Serial.println("RPM: " + ALPHA_RPM + "\n");
+      //String ALPHA_RPM = String(ENGINE_RPM);
+      //Serial.println("RPM: " + ALPHA_RPM + "\n");
     }
 
     if (canId == 1550)
     {
       int gearA = buf[2];
       int gearB = buf[3];
-      //int GEAR = ((gearA * 256) + gearB - 2); // why -2?
       int GEAR = ((gearA * 256) + gearB - 2);
       gearShift_update(GEAR, segColor);
-      String ALPHA_GEAR = String(GEAR);
-      Serial.println("GEAR: " + ALPHA_GEAR + "\n");
+      //String ALPHA_GEAR = String(GEAR);
+      //Serial.println("GEAR: " + ALPHA_GEAR + "\n");
     }
   
-    if (canId == 1542)
+    if (canId == 1541)
     {
       int tempA = buf[2];
       int tempB = buf[3];
-      ENGINE_TEMP = ((tempA * 256) + tempB) / 10;
-      //TEMP_warning(ENGINE_TEMP);
-      String ALPHA_TEMP = String(ENGINE_TEMP);
-      Serial.println("ENG TEMP: " + ALPHA_TEMP + "\n");
+      int ENGINE_TEMP = ((tempA * 256) + tempB) / 10;
+      TEMP_warning(ENGINE_TEMP);
+      //String ALPHA_TEMP = String(ENGINE_TEMP);
+      //Serial.println("ENG TEMP: " + ALPHA_TEMP + "\n");
     }
 
     if (canId == 1544)
@@ -207,22 +194,12 @@ void loop()
       int eopA = buf[0];
       int eopB = buf[1];
       //int INT_EOP = ((((eopA * 256) + eopB) - 921) * 0.0145037738); // why -921?
-      INT_EOP = (((eopA * 256) + eopB) * 0.0145037738); //millibars to PSI conversion
-      //EOP_warning(INT_EOP);
-      String ALPHA_EOP = String(INT_EOP);
-      Serial.println("EOP: " + ALPHA_EOP + "\n");
+      int INT_EOP = (((eopA * 256) + eopB) * 0.0145037738); //millibars to PSI conversion
+      EOP_warning(INT_EOP);
+      //String ALPHA_EOP = String(INT_EOP);
+      //Serial.println("EOP: " + ALPHA_EOP + "\n");
     }
   }
-}
-
-void init_timer1()
-{
-  //noInterrupts();
-  TCCR1A |= (1<<COM1A1);
-  TCCR1B |= (1<<CS10);
-  TIMSK1 |= (1<<OCIE1A);
-  OCR1A = 7999;
-  //interrupts();
 }
 
 void ledStrip_update(int rpm)
@@ -261,7 +238,7 @@ void ledStrip_update(int rpm)
       strip.show();
     }
   }
-  else if (LED_RPM >= shiftPT[1]) //SHIFT DAMNIT!! This blinks the LEDS back and forth with no delay to block button presses
+  else if (LED_RPM >= shiftPT[1]) //SHIFT DAMNIT!! This blinks the LEDS back and forth with no blocking delay
   {
     prev_range = 16;
     if (currentMillis - prevBlinkTime > blinkInterval)
@@ -295,30 +272,14 @@ void ledStrip_update(int rpm)
     }
   }
 }
-/*
-void gearOFF(int rpm)
-{
-  if(rpm == 0)
-  {
-    seg.clear();
-    seg.show();
-    off = true;
-  }
-  else
-  {
-    off = false;
-    prev_segColor = whiteSeg;
-  }
-}*/
 
 void gearShift_update(int gear, uint32_t segColor) // update and display gear number on segment display
 {
-  //int neutral = digitalRead(neutralPin);
-  //Serial.println("Neutral:" + neutral);
-  
+  //Serial.println("Neutral:" + digitalRead(neutralPin));
   if (digitalRead(neutralPin) == LOW)
   {
     gear = 0;
+    segColor = greenSeg;
     seg.clear();
     seg.show();
     for(int i = 0; i <= 6; i++)
@@ -346,40 +307,11 @@ void gearShift_update(int gear, uint32_t segColor) // update and display gear nu
 
 void TEMP_warning(int engine_temp) // turn LED on when engine temp is outside safe parameters
 {
-  if (engine_temp >= HIGH_ENG_TEMP)
-  {
-    LED.setPWM(ENG_LED, PWM_LEVEL);
-    LED.write();
-  }
-  else
-  {
-    LED.setPWM(ENG_LED, 0);
-    LED.write();
-  }
-}
-
-void EOP_warning(int EOP) // turn LED on when oil pressure is outside safe parameters
-{
-  if (EOP >= HIGH_EOP || EOP <= 8)
-  {
-    LED.setPWM(OIL_LED, PWM_LEVEL);
-    LED.write();
-  }
-  else
-  {
-    LED.setPWM(OIL_LED, 0);
-    LED.write();
-  }
-}
-
-void temp_interrupt()
-{
-  if (ENGINE_TEMP >= HIGH_ENG_TEMP && ENGINE_TEMP < UNSAFE_ENG_TEMP)
+  if (engine_temp >= HIGH_ENG_TEMP && engine_temp < UNSAFE_ENG_TEMP)
   {
     LED.setPWM(ENG_LED, PWM_LEVEL);
   }
-
-  else if (ENGINE_TEMP >= UNSAFE_ENG_TEMP)
+  else if (engine_temp >= UNSAFE_ENG_TEMP)
   {
     if (eng_state == false)
     {
@@ -392,61 +324,38 @@ void temp_interrupt()
       eng_state = false;
     }
   }
-
   else
   {
     LED.setPWM(ENG_LED, 0);
   }
-
   LED.write();
 }
 
-void oil_interrupt()
+void EOP_warning(int EOP) // turn LED on when oil pressure is outside safe parameters
 {
-  if (INT_EOP >= HIGH_EOP)
+  if (EOP >= HIGH_EOP)
   {
     LED.setPWM(OIL_LED, PWM_LEVEL);
   }
-
-  else if (INT_EOP < 8)
+  else if (EOP <= 8)
   {
     if (eop_state == false)
     {
       LED.setPWM(OIL_LED, PWM_LEVEL);
-      eng_state = true;
+      eop_state = true;
     }
     else
     {
       LED.setPWM(OIL_LED, 0);
-      eng_state = false;
+      eop_state = false;
     }
   }
-
   else
   {
     LED.setPWM(OIL_LED, 0);
   }
-
   LED.write();
 }
-
-/*
-void startupAnimation()
-{
-  for(int i = 0; i <= 4; i++)
-  {
-    for(int j = 0; j <= 7; j++)
-    {
-      if(digitHello[i][j])
-        seg.setPixelColor(j, blueSeg);
-    }
-    seg.show();
-    delay(500);
-    seg.clear();
-  }
-  seg.clear();
-  seg.show();
-}*/
 
 void startupAnimation()
 {
@@ -497,33 +406,3 @@ void startupAnimation()
   delay(1000);
 }
 
-ISR(TIMER1_COMPA_vect)
-{
-  if (count >= 250)
-  {
-    temp_interrupt();
-    oil_interrupt();
-    count = 0;
-  }
-  
-  else
-    count++;
-}
-
-/*
-void blink_led(int count, int ms_delay, int colorInt)
-{
-  strip.clear();
-  strip.show();
-  for(int i = 0; i < count; i++)
-  {
-    strip.setPixelColor(0, colorInt);
-    strip.show();
-    delay(ms_delay);
-    strip.clear();
-    strip.show();
-    delay(ms_delay/2);
-  }
-  strip.clear();
-  strip.show();
-}*/
