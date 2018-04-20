@@ -9,9 +9,6 @@
    
    Adafruit_TLC59711.h
 
-   ### Default Libraries:
+   ### Included Libraries:
    SPI.h
    
-   avr/io.h
-   
-   avr/interrupt.h
