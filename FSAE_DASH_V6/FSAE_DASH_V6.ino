@@ -216,7 +216,7 @@ void loop()
       int calB = buf[3];
       int ENABLE = ((enableA * 256) + enableB);
       int CAL = ((calA * 256) + calB);
-      cal_update(CAL);
+      brightness_ctrl(CAL);
       sleep(ENABLE);
       //String ALPHA_EN = String(ENABLE);
       //Serial.println("ENABLE: " + ALPHA_EN + "\n");
@@ -381,7 +381,7 @@ void EOP_warning(int EOP) // turn LED on when oil pressure is outside safe param
   LED.write();
 }
 
-void cal_update(int CAL)
+void brightness_ctrl(int CAL)
 {
   if (CAL >= 0 && CAL <= 3) // day time brightness
   {
@@ -393,6 +393,7 @@ void cal_update(int CAL)
     redSeg = redSegDay;
     yellowSeg = yellowSegDay;
     greenSeg = greenSegDay;
+    
     DUTY = 5;
     PWM_LEVEL = map(DUTY, 0, 100, 0, 65535);
   }
@@ -407,6 +408,7 @@ void cal_update(int CAL)
     redSeg = redSegNight;
     yellowSeg = yellowSegNight;
     greenSeg = greenSegNight;
+    
     DUTY = 1;
     PWM_LEVEL = map(DUTY, 0, 100, 0, 65535);
   }
