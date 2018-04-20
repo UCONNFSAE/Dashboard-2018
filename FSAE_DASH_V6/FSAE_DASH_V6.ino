@@ -20,7 +20,7 @@
 #define SPI_CS_PIN 9                                  // Declares D9 as CS for Seeed's CAN-BUS Shield.
 #define stripLength 16                                // NeoPixel LED strip length of 16
 #define stripDataPin 5                                // Declares D5 for strip data.
-#define blinkInterval 50
+#define blinkInterval 50                              // flashing blink interval
 
 // Segment display paramaters
 #define segmentLength 7                               // Segment display length of 7
@@ -31,7 +31,7 @@
 
 // Absolute brightness control for LEDs
 #define stripBrightness 200                                // 0 = off, 255 = fullbright
-#define segBrightness 255
+#define segBrightness 255                                  // brightness settings here set absolute values
 
 // TLC59711 parameters
 #define NUM_TLC59711 1 // amount of chips connected
@@ -39,11 +39,11 @@
 #define clock 7        // PWM clock pin (any digital pin)
 #define ENG_LED 0      // engine LED R0
 #define OIL_LED 1      // EOP LED G0
-#define DUTY 10        // values from 0 to 100% representing duty cycle
+int DUTY = 5;          // values from 0 to 100% representing duty cycle
 
 // Engine parameters                                         CHANGE VALUES HERE
-#define low_rpm 2200
-#define high_rpm 10000
+#define low_rpm 2000
+#define high_rpm 12000
 #define HIGH_ENG_TEMP 100
 #define UNSAFE_ENG_TEMP 105
 #define HIGH_EOP 55
@@ -56,13 +56,33 @@ Adafruit_NeoPixel seg = Adafruit_NeoPixel(segmentLength, segmentDataPin, NEO_GRB
 uint16_t PWM_LEVEL = map(DUTY, 0, 100, 0, 65535); // (DUTY/100) * 65535; PWM value ranges from 0 to 65535
 Adafruit_TLC59711 LED = Adafruit_TLC59711(NUM_TLC59711, clock, data); // initialization with parameters (chip amount, clock pin, data pin)
 
-// Define LED colors, MAY CHANGE BRIGHTNESS
-uint32_t greenStrip = strip.Color(0, 50, 0),
-         yellowStrip = strip.Color(50, 50, 0),
-         redStrip = strip.Color(50, 0, 0),
-         redMaxStrip = strip.Color(150, 0, 0),
-         blueStrip = strip.Color(0, 0, 50),
-         color[4] = {greenStrip, yellowStrip, redStrip, redMaxStrip};
+// Define LED colors, these are relative to the absolute brightness set above; MAY CHANGE BRIGHTNESS
+uint32_t greenStripDay = strip.Color(0, 50, 0),       // daytime brightness
+         yellowStripDay = strip.Color(50, 50, 0),
+         redStripDay = strip.Color(50, 0, 0),
+         redMaxStripDay = strip.Color(150, 0, 0),
+         
+         greenStripNight = strip.Color(0, 10, 0),     // lower brightness for evening
+         yellowStripNight = strip.Color(10, 10, 0),   
+         redStripNight = strip.Color(10, 0, 0),
+         redMaxStripNight = strip.Color(30, 0, 0),
+         color[4] = {greenStripDay, yellowStripDay, redStripDay, redMaxStripDay};
+
+
+// 7 segment display colors
+uint32_t redSegDay = seg.Color(255, 0, 0),               // daytime brightness
+         yellowSegDay = seg.Color(255, 255, 0),
+         greenSegDay = seg.Color(0, 255, 0),
+
+         redSegNight = seg.Color(30, 0, 0),              // evening brightness
+         yellowSegNight = seg.Color(30, 30, 0),
+         greenSegNight = seg.Color(0, 30, 0),
+
+         redSeg = redSegDay,                             // initial display brightness
+         yellowSeg = yellowSegDay,
+         greenSeg = greenSegDay,
+         segColor = greenSeg,
+         prev_segColor = greenSeg;
 
 // 7 segment display gear
 int digitArray[7][7] = {                    //                            ___________      
@@ -71,7 +91,7 @@ int digitArray[7][7] = {                    //                            ______
                     {1, 1, 0, 1, 1, 0, 1},  // 2                         |     6     |
                     {1, 1, 1, 1, 0, 0, 1},  // 3                         |  4     2  |
                     {0, 1, 1, 0, 0, 1, 1},  // 4                         |     3     |
-                    {1, 0, 1, 1, 0, 1, 1},  // 5                         |_________7_|
+                    {1, 0, 1, 1, 0, 1, 1},  // 5                         |___________|
                     {1, 0, 1, 1, 1, 1, 1}   // 6                         
                     };
 
@@ -84,31 +104,23 @@ int digitCircle[6][7] = {
                     {0, 0, 0, 0, 0, 1, 0}
                     };
 
-// 7 segment display colors
-uint32_t redSeg = seg.Color(255, 0, 0),
-         yellowSeg = seg.Color(255, 255, 0),
-         greenSeg = seg.Color(0, 255, 0),
-         blueSeg = seg.Color(0, 0, 255),
-         whiteSeg = seg.Color(255, 255, 255),
-         segColor = greenSeg,
-         prev_segColor = greenSeg;
+int shiftPT[2] = {low_rpm, high_rpm};   // sets lower and upper limits of RPMs to display
 
-int shiftPT[2] = {low_rpm, high_rpm};
-
-int prev_range = 10,        // needed for tachometer updating
-    prev_gear = 10,         // needed for gear position updating
+int prev_range = 10,        // needed for tachometer updating, arbitrary number
+    prev_gear = 10,         // needed for gear position updating, arbitrary number
     ledStages[2] = {5, 11}, // this is where each stage of the led strip is set. i.e. from ledStages[0] and ledStages[1] is stage one and so on
-    warningState = 0;       // allows warning to oscillate
+    led_pos = 0;            // position of LEDs in sleep mode
 long prevBlinkTime = 0;     // timer for warning flash interval
 
-//bool off = false;           // gear indicator off when engine is off
-
-bool eng_state = false;
-bool eop_state = false;
+bool warningState = false,  // blink state for shift point flashing
+     eng_state = false,     // blink state for engine warning LED
+     eop_state = false,     // blink state for oil pressure warning LED
+     pos_state = false,     // move LEDs left or right in sleep mode
+     enable_state = false;  // flag for sleep mode
 
 void setup()
 {
-  //Serial.begin(115200);     // comment out all Serials when not testing
+  //Serial.begin(115200);     // comment out all Serials and Strings when not testing
   do
   {
     if (CAN_OK == CAN.begin(CAN_1000KBPS))  // initializes CAN-BUS Shield at specified baud rate.
@@ -126,9 +138,6 @@ void setup()
   }
   while(true);
 
-  prev_range = 10;
-  prev_gear = 10;
-  
   pinMode(neutralPin, INPUT); // sets neutralPin (pin 6) as input
   
   // begin NeoPixel strip
@@ -193,22 +202,37 @@ void loop()
     {
       int eopA = buf[0];
       int eopB = buf[1];
-      //int INT_EOP = ((((eopA * 256) + eopB) - 921) * 0.0145037738); // why -921?
-      int INT_EOP = (((eopA * 256) + eopB) * 0.0145037738); //millibars to PSI conversion
+      int INT_EOP = (((eopA * 256) + eopB) * 0.0145037738); // millibars to PSI conversion
       EOP_warning(INT_EOP);
       //String ALPHA_EOP = String(INT_EOP);
       //Serial.println("EOP: " + ALPHA_EOP + "\n");
     }
+
+    if (canId == 1546)
+    {
+      int enableA = buf[0];
+      int enableB = buf[1];
+      int calA = buf[2];
+      int calB = buf[3];
+      int ENABLE = ((enableA * 256) + enableB);
+      int CAL = ((calA * 256) + calB);
+      cal_update(CAL);
+      sleep(ENABLE);
+      //String ALPHA_EN = String(ENABLE);
+      //Serial.println("ENABLE: " + ALPHA_EN + "\n");
+      //String ALPHA_CAL = String(CAL);
+      //Serial.println("CAL: " + ALPHA_CAL + "\n");
+    }
   }
 }
 
-void ledStrip_update(int rpm)
+void ledStrip_update(int rpm)   // tachometer function
 {
   int LED_RPM = rpm;
-  unsigned long currentMillis = millis();
-  if (LED_RPM >= shiftPT[0] && LED_RPM < shiftPT[1]) // if the RPM is between the activation pt and the shift pt
+  unsigned long currentMillis = millis();   // get current timer for flashing condition
+  if (LED_RPM >= shiftPT[0] && LED_RPM < shiftPT[1]) // if the RPM is between the lowest RPM and the shift point
   {
-    // map the RPM values to 9(really 8 since the shift point and beyond is handled below) and constrain the range
+    // map the RPM values from 0 to 16(really 15 since the shift point and beyond is handled below) and constrain the range
     int rpmMapped = map(LED_RPM, shiftPT[0], shiftPT[1], 0, 16);
     int rpmConstrained = constrain(rpmMapped, 0, 16);
 
@@ -216,20 +240,20 @@ void ledStrip_update(int rpm)
     {
       prev_range = rpmConstrained;
       strip.clear();
-      for (int ledNum = 0; ledNum <= rpmConstrained; ledNum++) // rpmConstrained makes ledNum refer to one LED too muc on the light strip since the light strip is indexes from 0,
+      for (int ledNum = 0; ledNum <= rpmConstrained; ledNum++) // rpmConstrained makes ledNum refer to one LED too much on the light strip since the light strip is indexed from 0,
                                                                // causes brief moment of max rpm before flashing to change gear
       {
-        if (ledNum <= ledStages[0])
+        if (ledNum <= ledStages[0])                            // green
         {
           strip.setPixelColor(ledNum, color[0]);
           segColor = greenSeg;
         }
-        else if (ledNum > ledStages[0] && ledNum <= ledStages[1])
+        else if (ledNum > ledStages[0] && ledNum <= ledStages[1])   // yellow
         {
           strip.setPixelColor(ledNum, color[1]);
           segColor = yellowSeg;
         }
-        else if (ledNum > ledStages[1] && ledNum < strip.numPixels())
+        else if (ledNum > ledStages[1] && ledNum < stripLength)     // red
         {
           strip.setPixelColor(ledNum, color[2]);
           segColor = redSeg;
@@ -238,17 +262,17 @@ void ledStrip_update(int rpm)
       strip.show();
     }
   }
-  else if (LED_RPM >= shiftPT[1]) //SHIFT DAMNIT!! This blinks the LEDS back and forth with no blocking delay
+  else if (LED_RPM >= shiftPT[1]) // RPM at or above shift point, blinks the LEDS on and off with no blocking delay
   {
     prev_range = 16;
-    if (currentMillis - prevBlinkTime > blinkInterval)
+    if (currentMillis - prevBlinkTime > blinkInterval)    // millis eventually overflows but only after 50 days powered on so abs value is not needed here
     {
       prevBlinkTime = currentMillis;
 
-      if (warningState == 0)
+      if (warningState == false)
       {
-        warningState = 1;
-        for (int i = 0; i < strip.numPixels(); i++)
+        warningState = true;
+        for (int i = 0; i < stripLength; i++)
         {
           strip.setPixelColor(i, color[3]);
         }
@@ -258,7 +282,7 @@ void ledStrip_update(int rpm)
       {
         strip.clear();
         strip.show();
-        warningState = 0;
+        warningState = false;
       }
     }
   }
@@ -357,6 +381,78 @@ void EOP_warning(int EOP) // turn LED on when oil pressure is outside safe param
   LED.write();
 }
 
+void cal_update(int CAL)
+{
+  if (CAL >= 0 && CAL <= 3) // day time brightness
+  {
+    color[0] = greenStripDay;
+    color[1] = yellowStripDay;
+    color[2] = redStripDay;
+    color[3] = redMaxStripDay;
+
+    redSeg = redSegDay;
+    yellowSeg = yellowSegDay;
+    greenSeg = greenSegDay;
+    DUTY = 5;
+    PWM_LEVEL = map(DUTY, 0, 100, 0, 65535);
+  }
+
+  else  // night time brightness
+  {
+    color[0] = greenStripNight;
+    color[1] = yellowStripNight;
+    color[2] = redStripNight;
+    color[3] = redMaxStripNight;
+
+    redSeg = redSegNight;
+    yellowSeg = yellowSegNight;
+    greenSeg = greenSegNight;
+    DUTY = 1;
+    PWM_LEVEL = map(DUTY, 0, 100, 0, 65535);
+  }
+}
+
+void sleep(int ENABLE)  // idle animation when engine is not running
+{
+  if (ENABLE == 0)
+  {
+    strip.clear();
+    
+    if (led_pos <= ledStages[0])
+      strip.setPixelColor(led_pos, color[0]);
+      
+    else if (led_pos > ledStages[0] && led_pos <= ledStages[1])
+      strip.setPixelColor(led_pos, color[1]);
+      
+    else if (led_pos > ledStages[0] && led_pos < stripLength)
+      strip.setPixelColor(led_pos, color[2]);
+    
+    strip.show();
+
+    if (pos_state == false)
+    {
+      led_pos++;
+      if (led_pos == 15)
+        pos_state = true;
+    }
+    else if (pos_state == true)
+    {
+      led_pos--;
+      if (led_pos == 0)
+        pos_state = false;
+    }
+
+    enable_state = false;
+  }
+
+  else if (ENABLE == 1 && enable_state == false)
+  {
+    strip.clear();
+    strip.show();
+    enable_state = true;
+  }
+}
+
 void startupAnimation()
 {
   LED.setPWM(ENG_LED, PWM_LEVEL);
@@ -387,12 +483,11 @@ void startupAnimation()
       strip.setPixelColor(h, color[1]);
       segColor = yellowSeg;
     }
-    else if (h > ledStages[1] && h < strip.numPixels())
+    else if (h > ledStages[1] && h < stripLength)
     {
       strip.setPixelColor(h, color[2]);
       segColor = redSeg;
     }
-    //strip.setPixelColor(h, blueStrip);
     strip.show();
   }
   seg.clear();
