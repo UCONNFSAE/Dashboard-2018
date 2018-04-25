@@ -20,7 +20,7 @@
 #define SPI_CS_PIN 9                                  // Declares D9 as CS for Seeed's CAN-BUS Shield.
 #define stripLength 16                                // NeoPixel LED strip length of 16
 #define stripDataPin 5                                // Declares D5 for strip data.
-#define blinkInterval 50                              // flashing blink interval
+#define blinkInterval 50                              // flashing blink interval in ms
 
 // Segment display paramaters
 #define segmentLength 7                               // Segment display length of 7
@@ -43,7 +43,7 @@ int DUTY = 5;          // values from 0 to 100% representing duty cycle
 
 // Engine parameters                                         CHANGE VALUES HERE
 #define low_rpm 2000
-#define high_rpm 12000
+#define high_rpm 10000
 #define HIGH_ENG_TEMP 100
 #define UNSAFE_ENG_TEMP 105
 #define HIGH_EOP 55
@@ -73,10 +73,13 @@ uint32_t greenStripDay = strip.Color(0, 50, 0),       // daytime brightness
 uint32_t redSegDay = seg.Color(255, 0, 0),               // daytime brightness
          yellowSegDay = seg.Color(255, 255, 0),
          greenSegDay = seg.Color(0, 255, 0),
+         blueSegDay = seg.Color(0, 0, 255),
+         whiteSegDay = seg.Color(255, 255, 255),
 
          redSegNight = seg.Color(30, 0, 0),              // evening brightness
          yellowSegNight = seg.Color(30, 30, 0),
          greenSegNight = seg.Color(0, 30, 0),
+         whiteSegNight = seg.Color(30, 30, 30),
 
          redSeg = redSegDay,                             // initial display brightness
          yellowSeg = yellowSegDay,
@@ -210,16 +213,10 @@ void loop()
 
     if (canId == 1546)
     {
-      int enableA = buf[0];
-      int enableB = buf[1];
       int calA = buf[2];
       int calB = buf[3];
-      int ENABLE = ((enableA * 256) + enableB);
       int CAL = ((calA * 256) + calB);
       brightness_ctrl(CAL);
-      sleep(ENABLE);
-      //String ALPHA_EN = String(ENABLE);
-      //Serial.println("ENABLE: " + ALPHA_EN + "\n");
       //String ALPHA_CAL = String(CAL);
       //Serial.println("CAL: " + ALPHA_CAL + "\n");
     }
@@ -246,17 +243,17 @@ void ledStrip_update(int rpm)   // tachometer function
         if (ledNum <= ledStages[0])                            // green
         {
           strip.setPixelColor(ledNum, color[0]);
-          segColor = greenSeg;
+          //segColor = greenSeg;
         }
         else if (ledNum > ledStages[0] && ledNum <= ledStages[1])   // yellow
         {
           strip.setPixelColor(ledNum, color[1]);
-          segColor = yellowSeg;
+          //segColor = yellowSeg;
         }
         else if (ledNum > ledStages[1] && ledNum < stripLength)     // red
         {
           strip.setPixelColor(ledNum, color[2]);
-          segColor = redSeg;
+          //segColor = redSeg;
         }
       }
       strip.show();
@@ -303,7 +300,7 @@ void gearShift_update(int gear, uint32_t segColor) // update and display gear nu
   if (digitalRead(neutralPin) == LOW)
   {
     gear = 0;
-    segColor = greenSeg;
+    segColor = blueSegDay;
     seg.clear();
     seg.show();
     for(int i = 0; i <= 6; i++)
@@ -361,7 +358,7 @@ void EOP_warning(int EOP) // turn LED on when oil pressure is outside safe param
   {
     LED.setPWM(OIL_LED, PWM_LEVEL);
   }
-  else if (EOP <= 8)
+  else if (EOP < 8)
   {
     if (eop_state == false)
     {
@@ -383,7 +380,7 @@ void EOP_warning(int EOP) // turn LED on when oil pressure is outside safe param
 
 void brightness_ctrl(int CAL)
 {
-  if (CAL >= 0 && CAL <= 3) // day time brightness
+  if (CAL >= 0 && CAL <= 3) // day time brightness (CAL settings 1 through 4)
   {
     color[0] = greenStripDay;
     color[1] = yellowStripDay;
@@ -393,6 +390,7 @@ void brightness_ctrl(int CAL)
     redSeg = redSegDay;
     yellowSeg = yellowSegDay;
     greenSeg = greenSegDay;
+    segColor = whiteSegDay;
     
     DUTY = 5;
     PWM_LEVEL = map(DUTY, 0, 100, 0, 65535);
@@ -408,50 +406,10 @@ void brightness_ctrl(int CAL)
     redSeg = redSegNight;
     yellowSeg = yellowSegNight;
     greenSeg = greenSegNight;
+    segColor = redSegNight;
     
     DUTY = 1;
     PWM_LEVEL = map(DUTY, 0, 100, 0, 65535);
-  }
-}
-
-void sleep(int ENABLE)  // idle animation when engine is not running
-{
-  if (ENABLE == 0)
-  {
-    strip.clear();
-    
-    if (led_pos <= ledStages[0])
-      strip.setPixelColor(led_pos, color[0]);
-      
-    else if (led_pos > ledStages[0] && led_pos <= ledStages[1])
-      strip.setPixelColor(led_pos, color[1]);
-      
-    else if (led_pos > ledStages[0] && led_pos < stripLength)
-      strip.setPixelColor(led_pos, color[2]);
-    
-    strip.show();
-
-    if (pos_state == false)
-    {
-      led_pos++;
-      if (led_pos == 15)
-        pos_state = true;
-    }
-    else if (pos_state == true)
-    {
-      led_pos--;
-      if (led_pos == 0)
-        pos_state = false;
-    }
-
-    enable_state = false;
-  }
-
-  else if (ENABLE == 1 && enable_state == false)
-  {
-    strip.clear();
-    strip.show();
-    enable_state = true;
   }
 }
 
