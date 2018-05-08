@@ -84,8 +84,7 @@ uint32_t redSegDay = seg.Color(255, 0, 0),               // daytime brightness
          redSeg = redSegDay,                             // initial display brightness
          yellowSeg = yellowSegDay,
          greenSeg = greenSegDay,
-         segColor = greenSeg,
-         prev_segColor = greenSeg;
+         segColor = greenSeg;
 
 // 7 segment display gear
 int digitArray[7][7] = {                    //                            ___________      
@@ -117,9 +116,7 @@ long prevBlinkTime = 0;     // timer for warning flash interval
 
 bool warningState = false,  // blink state for shift point flashing
      eng_state = false,     // blink state for engine warning LED
-     eop_state = false,     // blink state for oil pressure warning LED
-     pos_state = false,     // move LEDs left or right in sleep mode
-     enable_state = false;  // flag for sleep mode
+     eop_state = false;     // blink state for oil pressure warning LED
 
 void setup()
 {
@@ -140,8 +137,6 @@ void setup()
     }
   }
   while(true);
-
-  pinMode(neutralPin, INPUT); // sets neutralPin (pin 6) as input
   
   // begin NeoPixel strip
   strip.begin();
@@ -158,23 +153,32 @@ void setup()
   LED.begin();
   
   startupAnimation();
+
+  color[0] = greenStripDay;
+  color[1] = yellowStripDay;
+  color[2] = redStripDay;
+  color[3] = redMaxStripDay;
+
+  segColor = whiteSegDay;
 }
 
 void loop()
 {
   unsigned char len = 0;
-  unsigned char buf[4];
+  unsigned char buf[8];
   if(CAN_MSGAVAIL == CAN.checkReceive()) //Checks for incoming data.
   {
     CAN.readMsgBuf(&len, buf);           //Reads incoming data. len: data length, buf[location]: actual data.
     unsigned int canId = CAN.getCanId();
     //String id = String(canId);
     //Serial.println(id);
+    
     if (canId == 1536)
     {
+      int ENGINE_RPM = 0;
       int rpmA = buf[0];
       int rpmB = buf[1];
-      int ENGINE_RPM = ((rpmA * 256) + rpmB);
+      ENGINE_RPM = ((rpmA * 256) + rpmB);
       ledStrip_update(ENGINE_RPM);
       //gearOFF(ENGINE_RPM);
       //String ALPHA_RPM = String(ENGINE_RPM);
@@ -186,7 +190,7 @@ void loop()
       int gearA = buf[2];
       int gearB = buf[3];
       int GEAR = ((gearA * 256) + gearB - 2);
-      gearShift_update(GEAR, segColor);
+      gearShift_update(GEAR);
       //String ALPHA_GEAR = String(GEAR);
       //Serial.println("GEAR: " + ALPHA_GEAR + "\n");
     }
@@ -209,16 +213,6 @@ void loop()
       EOP_warning(INT_EOP);
       //String ALPHA_EOP = String(INT_EOP);
       //Serial.println("EOP: " + ALPHA_EOP + "\n");
-    }
-
-    if (canId == 1546)
-    {
-      int calA = buf[2];
-      int calB = buf[3];
-      int CAL = ((calA * 256) + calB);
-      brightness_ctrl(CAL);
-      //String ALPHA_CAL = String(CAL);
-      //Serial.println("CAL: " + ALPHA_CAL + "\n");
     }
   }
 }
@@ -243,17 +237,14 @@ void ledStrip_update(int rpm)   // tachometer function
         if (ledNum <= ledStages[0])                            // green
         {
           strip.setPixelColor(ledNum, color[0]);
-          //segColor = greenSeg;
         }
         else if (ledNum > ledStages[0] && ledNum <= ledStages[1])   // yellow
         {
           strip.setPixelColor(ledNum, color[1]);
-          //segColor = yellowSeg;
         }
         else if (ledNum > ledStages[1] && ledNum < stripLength)     // red
         {
           strip.setPixelColor(ledNum, color[2]);
-          //segColor = redSeg;
         }
       }
       strip.show();
@@ -294,36 +285,15 @@ void ledStrip_update(int rpm)   // tachometer function
   }
 }
 
-void gearShift_update(int gear, uint32_t segColor) // update and display gear number on segment display
+void gearShift_update(int gear) // update and display gear number on segment display
 {
-  //Serial.println("Neutral:" + digitalRead(neutralPin));
-  if (digitalRead(neutralPin) == LOW)
-  {
-    gear = 0;
-    segColor = blueSegDay;
     seg.clear();
-    seg.show();
     for(int i = 0; i <= 6; i++)
     {
       if(digitArray[gear][i])
-        seg.setPixelColor(i, segColor);
+        seg.setPixelColor(i, whiteSegDay);
     }
     seg.show();
-  }
-
-  // short-circuit evaluation optimization
-  else if (prev_segColor != segColor || gear != prev_gear) {
-    prev_segColor = segColor;
-    prev_gear = gear;
-    seg.clear();
-    seg.show();
-    for(int i = 0; i <= 6; i++)
-    {
-      if(digitArray[gear][i])
-        seg.setPixelColor(i, segColor);
-    }
-    seg.show();
-  }
 }
 
 void TEMP_warning(int engine_temp) // turn LED on when engine temp is outside safe parameters
@@ -376,41 +346,6 @@ void EOP_warning(int EOP) // turn LED on when oil pressure is outside safe param
     LED.setPWM(OIL_LED, 0);
   }
   LED.write();
-}
-
-void brightness_ctrl(int CAL)
-{
-  if (CAL >= 0 && CAL <= 3) // day time brightness (CAL settings 1 through 4)
-  {
-    color[0] = greenStripDay;
-    color[1] = yellowStripDay;
-    color[2] = redStripDay;
-    color[3] = redMaxStripDay;
-
-    redSeg = redSegDay;
-    yellowSeg = yellowSegDay;
-    greenSeg = greenSegDay;
-    segColor = whiteSegDay;
-    
-    DUTY = 5;
-    PWM_LEVEL = map(DUTY, 0, 100, 0, 65535);
-  }
-
-  else  // night time brightness
-  {
-    color[0] = greenStripNight;
-    color[1] = yellowStripNight;
-    color[2] = redStripNight;
-    color[3] = redMaxStripNight;
-
-    redSeg = redSegNight;
-    yellowSeg = yellowSegNight;
-    greenSeg = greenSegNight;
-    segColor = redSegNight;
-    
-    DUTY = 1;
-    PWM_LEVEL = map(DUTY, 0, 100, 0, 65535);
-  }
 }
 
 void startupAnimation()
