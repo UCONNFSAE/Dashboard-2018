@@ -26,9 +26,6 @@
 #define segmentLength 7                               // Segment display length of 7
 #define segmentDataPin 3                              // D3 for segment display data
 
-// Neutral digital read pin
-#define neutralPin 6
-
 // Absolute brightness control for LEDs
 #define stripBrightness 200                                // 0 = off, 255 = fullbright
 #define segBrightness 255                                  // brightness settings here set absolute values
